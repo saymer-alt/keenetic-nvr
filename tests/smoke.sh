@@ -2,7 +2,7 @@
 # Offline BusyBox ash integration smoke. Run from repository root.
 set -eu
 cd "$(dirname "$0")/.."
-for f in NVR/v2/nvr.sh NVR/v2/install-router.sh NVR/v2/fresh-install.sh NVR/v2/bootstrap.sh; do
+for f in NVR/v2/nvr.sh NVR/v2/install-router.sh NVR/v2/fresh-install.sh NVR/v2/upgrade-router.sh NVR/v2/bootstrap.sh; do
   sh -n "$f"
   busybox sh -n "$f"
 done
@@ -34,8 +34,8 @@ NVR_DISK_CRIT_PERCENT=90
 EOT
 NVR() { NVR_CONFIG="$T/conf" busybox sh NVR/v2/nvr.sh "$@"; }
 
-# Status basics: v2.4 report format, standalone (no notification transports).
-NVR status | grep -q 'NVR v2.4 - '
+# Status basics: a new installation without a healthy check is NOT healthy.
+NVR status | grep -q 'NVR v2.4 - DEGRADED'
 NVR status | grep -q 'DISK: RW,'
 NVR status | grep -q 'RETENTION: 72 hours'
 NVR status | grep -q 'SEGMENT: 900 seconds'
@@ -59,6 +59,21 @@ NVR check
 [ "$(cat "$T/state/cam101.pid")" = "$p0" ]
 [ -f "$T/state/check.state" ]
 NVR status | grep -q 'LAST CHECK: '
+NVR status | grep -q 'NVR v2.4 - HEALTHY'
+# Healthy FFmpeg files must not mask a stale / missing watchdog.
+printf 'CHECK_LAST_EPOCH=%s\nCHECK_LAST_HUMAN=2020-01-01 00:00:00\n' "$(( $(date +%s) - 900 ))" > "$T/state/check.state"
+NVR status | grep -q 'NVR v2.4 - DEGRADED'
+NVR check
+NVR status | grep -q 'NVR v2.4 - HEALTHY'
+# A dead ffmpeg is DOWN, even if its last output file is still recent.
+kill -TERM "$p201"
+sleep 1
+NVR status | grep -q '^CAM 201: DOWN, '
+NVR status | grep -q 'NVR v2.4 - DEGRADED'
+NVR check
+sleep 2
+p201=$(cat "$T/state/cam201.pid")
+NVR status | grep -q 'NVR v2.4 - HEALTHY'
 # One stalled camera must be restarted, others left untouched.
 kill -STOP "$p0"
 f=$(find "$M/cctv/cam101" -name '*.mkv' | head -n 1)
