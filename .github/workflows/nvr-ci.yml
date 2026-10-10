@@ -3,7 +3,7 @@ name: NVR checks
 on:
   push:
     branches: [main, 'nvr/**']
-    paths: ['NVR/**', 'tests/**', '.github/workflows/nvr-ci.yml', 'README.md', '.gitattributes']
+    paths: ['NVR/**', 'tests/**', '.github/workflows/nvr-ci.yml', 'README.md', '.gitattributes', 'legacy/**']
   pull_request:
     paths: ['NVR/**', 'tests/**', '.github/workflows/nvr-ci.yml']
 

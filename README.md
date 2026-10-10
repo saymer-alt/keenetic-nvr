@@ -125,6 +125,7 @@ sh tests/source-links.sh
 | [NVR/v2/CHANGELOG.md](NVR/v2/CHANGELOG.md) | Изменения и фактические испытания |
 | [NVR/v2/KNOWN-LIMITATIONS.md](NVR/v2/KNOWN-LIMITATIONS.md) | Известные ограничения и дальнейшие задачи |
 | [tests/](tests/) | Офлайн-тесты, выполняемые GitHub Actions |
+| [legacy/v1/](legacy/v1/) | Исторические скрипты NVR v1 и HTTP-вещания, **не используйте для установки v2.4** |
 
 ## Совместимость и безопасность
 
