@@ -1,8 +1,8 @@
 #!/bin/sh
-# Keenetic/Entware NVR v2.4 — supervised ffmpeg stream-copy recorder.
+# Keenetic/Entware NVR v2.5 — supervised ffmpeg stream-copy recorder.
 # Each cron tick is independent; no persistent shell watchdog.
-# Retention contract: every finished segment is kept at least NVR_RETENTION_SECONDS
-# (default 259200 = 72 h) measured by file mtime. Fullness NEVER shortens it.
+# Safe default: time-based retention, at least 72h of finished segments.
+# Circular and hybrid modes explicitly opt into capacity-based eviction.
 set -u
 umask 077
 PATH=/opt/bin:/opt/sbin:/bin:/sbin:/usr/bin:/usr/sbin
@@ -18,6 +18,10 @@ CAMERAS=${NVR_CAMERAS:-'101 201 301'}
 STALE=${NVR_STALE_SECONDS:-720}
 GRACE=${NVR_GRACE_SECONDS:-600}
 RETENTION=${NVR_RETENTION_SECONDS:-259200}
+STORAGE_MODE=${NVR_STORAGE_MODE:-time}
+RESERVE_PCT=${NVR_DISK_FREE_RESERVE_PERCENT:-10}
+RESERVE_MIN_MB=${NVR_DISK_FREE_MIN_MB:-128}
+DFBIN=${NVR_DF_BIN:-df}
 DISK_WARN=${NVR_DISK_WARN_PERCENT:-75}
 DISK_CRIT=${NVR_DISK_CRIT_PERCENT:-90}
 SEGMENT=900
@@ -42,11 +46,14 @@ numfile() { v=$(cat "$1" 2>/dev/null) || v=0; isnum "$v" || v=0; printf '%s\n' "
 for id in $CAMERAS; do
     isnum "$id" || { echo 'NVR: numeric camera IDs required' >&2; exit 2; }
 done
-for v in "$STALE" "$GRACE" "$RETENTION" "$DISK_WARN" "$DISK_CRIT" \
+for v in "$STALE" "$GRACE" "$RETENTION" "$DISK_WARN" "$DISK_CRIT" "$RESERVE_PCT" "$RESERVE_MIN_MB" \
          "$CLEANUP_STALE" "$NOTIFY_REPEAT" "$NOTIFY_TIMEOUT" "$RTSP_ENCODE"; do
     isnum "$v" || { echo 'NVR: invalid numeric configuration' >&2; exit 2; }
 done
-[ "$STALE" -ge 120 ] && [ "$RETENTION" -ge 259200 ] && \
+case "$STORAGE_MODE" in time|circular|hybrid) ;; *) echo 'NVR: invalid NVR_STORAGE_MODE (time|circular|hybrid)' >&2; exit 2;; esac
+[ "$STALE" -ge 120 ] && [ "$RETENTION" -ge 3600 ] && [ "$RETENTION" -le 315360000 ] && \
+[ "$RESERVE_PCT" -ge 1 ] && [ "$RESERVE_PCT" -le 50 ] && \
+[ "$RESERVE_MIN_MB" -le 1048576 ] && \
 [ "$DISK_WARN" -ge 1 ] && [ "$DISK_WARN" -le 100 ] && \
 [ "$DISK_CRIT" -ge "$DISK_WARN" ] && [ "$DISK_CRIT" -le 100 ] && \
 [ "$RTSP_ENCODE" -le 1 ] && [ "$NOTIFY_TIMEOUT" -ge 1 ] && \
@@ -81,12 +88,12 @@ log() {
     fi
 }
 usage_pct() {
-    u=$(df -P "$NVR_MOUNT" 2>/dev/null | awk 'NR==2 {gsub(/%/, "", $5); print $5}')
+    u=$("$DFBIN" -P "$NVR_MOUNT" 2>/dev/null | awk 'NR==2 {gsub(/%/, "", $5); print $5}')
     isnum "$u" || return 1
     printf '%s\n' "$u"
 }
 free_kb() {
-    u=$(df -P -k "$NVR_MOUNT" 2>/dev/null | awk 'NR==2 {print $4}')
+    u=$("$DFBIN" -P -k "$NVR_MOUNT" 2>/dev/null | awk 'NR==2 {print $4}')
     isnum "$u" || return 1
     printf '%s\n' "$u"
 }
@@ -455,6 +462,8 @@ disk_health() {
 # retention horizon. Only real recording files are counted; without them the
 # estimate is skipped instead of guessed.
 forecast_space() {
+    # Capacity modes explicitly permit early eviction; no guaranteed hour horizon.
+    [ "$STORAGE_MODE" = time ] || return 0
     total=0
     for id in $CAMERAS; do
         for f in "$NVR_BASE_DIR/cam$id"/cam"$id"_*.mkv; do
@@ -595,7 +604,7 @@ status() {
         cam_report="${cam_report}CAM $id: $state, last write $disp
 "
     done
-    echo "NVR v2.4 - $overall"
+    echo "NVR v2.5 - $overall"
     if mounted_rw; then
         u=$(usage_pct) || u=unknown
         free=$(free_kb) || free=unknown
@@ -606,7 +615,14 @@ status() {
     else
         echo 'DISK: NOT MOUNTED/READ-ONLY'
     fi
-    echo "RETENTION: $(( RETENTION / 3600 )) hours"
+    echo "STORAGE MODE: $STORAGE_MODE"
+    case "$STORAGE_MODE" in
+        circular) echo 'RETENTION: capacity-based (no minimum)' ;;
+        *) echo "RETENTION: $(( RETENTION / 3600 )) hours" ;;
+    esac
+    if [ "$STORAGE_MODE" != time ]; then
+        echo "FREE RESERVE: ${RESERVE_PCT}% (minimum ${RESERVE_MIN_MB} MB)"
+    fi
     echo "SEGMENT: $SEGMENT seconds"
     case $last_check_age in
         unknown) echo "LAST CHECK: ${CHECK_LAST_HUMAN:-never}";;
@@ -651,7 +667,7 @@ notify_test() {
         echo 'NVR_NOTIFY_WEBHOOK_URL to /opt/etc/nvr-v2.conf (mode 600), then re-run this test.'
         return 2
     fi
-    msg='test notification from NVR v2.4'
+    msg='test notification from NVR v2.5'
     if send_notify TEST notify-test "$msg"; then
         echo "Test notification delivered. telegram=${TG_CODE:-skipped} webhook=${WH_CODE:-skipped}"
         return 0
@@ -680,59 +696,186 @@ do_start() {
     log 'INFO started/resumed by operator'
     check
 }
-cleanup() {
-    if ! disk_ok; then
-        save_cleanup_state FAILED 0 0
-        notify_event WARN cleanup-error 'archive cleanup failed: storage unavailable'
-        return 1
-    fi
-    disk_health
-    # Strict retention policy: a per-camera, rolling 72-hour *time* horizon.
-    # Fullness must NEVER shorten it; do not remove unexpired footage.
-    # mtime marks the last bytes actually written, not the filename start time.
-    # Cleanup runs hourly, so expiration may occur up to an hour later.
-    cutoff=$((NOW-RETENTION))
-    removed=0; failed=0; skipped=0
-    for id in $CAMERAS; do
-        # Don't unlink a segment potentially still held open by an FFmpeg process.
-        pid=$(numfile "$STATE/cam$id.pid")
-        open_file=''
-        if owned "$id" "$pid"; then
-            open_file=$(newest "$id")
-        else
-            # Also protect against an untracked but active recorder process.
-            other=$(find_camera_pid "$id") || other=''
-            [ -z "$other" ] || open_file=$(newest "$id")
-        fi
-        for f in "$NVR_BASE_DIR/cam$id"/cam"$id"_*.mkv; do
-            [ -f "$f" ] || continue
-            [ "$f" = "$open_file" ] && continue
-            mt=$(stat -c %Y "$f" 2>/dev/null) || { skipped=$((skipped+1)); continue; }
-            isnum "$mt" || { skipped=$((skipped+1)); continue; }
-            if [ "$mt" -lt "$cutoff" ]; then
-                if rm -f -- "$f" 2>/dev/null && [ ! -e "$f" ]; then
-                    removed=$((removed+1))
-                else
-                    failed=$((failed+1))
-                fi
-            fi
+# Return 0 if the candidate is a currently open FFmpeg segment, 1 if closed,
+# and 2 when an active FFmpeg has descriptors we cannot inspect.
+segment_open() {
+    candidate=$1; channel=$2
+    for active_pid in $(pidof ffmpeg 2>/dev/null); do
+        owned "$channel" "$active_pid" || continue
+        [ -r "/proc/$active_pid/fd" ] || return 2
+        for fd in "/proc/$active_pid/fd"/*; do
+            [ -L "$fd" ] || continue
+            fd_path=$(readlink "$fd" 2>/dev/null) || return 2
+            case "$fd_path" in "$candidate"|"$candidate (deleted)") return 0;; esac
         done
     done
+    return 1
+}
+# 0: safe closed segment; 1: skip (active/non-file/future); 2: uncertain.
+eligible_segment() {
+    candidate_file=$1; candidate_id=$2; expected_mt=${3:-}
+    [ -f "$candidate_file" ] && [ ! -L "$candidate_file" ] || return 1
+    case "$candidate_file" in *[!A-Za-z0-9_./%-]*) return 2;; esac
+    candidate_now=$(stat -c %Y "$candidate_file" 2>/dev/null) || return 2
+    isnum "$candidate_now" || return 2
+    [ "$candidate_now" -le "$NOW" ] || return 1
+    [ -z "$expected_mt" ] || [ "$candidate_now" = "$expected_mt" ] || return 2
+    tracked_pid=$(numfile "$STATE/cam$candidate_id.pid")
+    untracked_pid=$(find_camera_pid "$candidate_id") || untracked_pid=''
+    if owned "$candidate_id" "$tracked_pid" || [ -n "$untracked_pid" ]; then
+        current_file=$(newest "$candidate_id")
+        [ "$candidate_file" != "$current_file" ] || return 1
+    fi
+    if segment_open "$candidate_file" "$candidate_id"; then return 1
+    else
+        open_rc=$?
+        [ "$open_rc" -eq 1 ] || return 2
+    fi
+    return 0
+}
+reserve_kb() {
+    total=$("$DFBIN" -P -k "$NVR_MOUNT" 2>/dev/null | awk 'NR==2 {print $2}') || return 1
+    isnum "$total" && [ "$total" -gt 0 ] || return 1
+    percent_kb=$(( (total * RESERVE_PCT + 99) / 100 ))
+    absolute_kb=$(( RESERVE_MIN_MB * 1024 ))
+    if [ "$percent_kb" -gt "$absolute_kb" ]; then printf '%s\n' "$percent_kb"
+    else printf '%s\n' "$absolute_kb"; fi
+}
+# Extra restrictions apply before enabling any capacity-driven eviction.
+safe_archive() {
+    [ -d "$NVR_BASE_DIR" ] && [ ! -L "$NVR_BASE_DIR" ] || return 1
+    real_archive=$(readlink -f "$NVR_BASE_DIR" 2>/dev/null) || return 1
+    real_mount=$(readlink -f "$NVR_MOUNT" 2>/dev/null) || return 1
+    case "$real_archive" in "$real_mount"/*) ;; *) return 1;; esac
+    for check_id in $CAMERAS; do
+        [ ! -L "$NVR_BASE_DIR/cam$check_id" ] || return 1
+    done
+    return 0
+}
+# The caller updates cleanup state; dry-run only previews, never unlinks.
+delete_segment() {
+    target_file=$1; target_id=$2; target_mt=${3:-}
+    if eligible_segment "$target_file" "$target_id" "$target_mt"; then :; else return $?; fi
+    planned_kb=0
+    if [ "$dry" -eq 1 ]; then
+        size_bytes=$(stat -c %s "$target_file" 2>/dev/null) || return 2
+        isnum "$size_bytes" || return 2
+        planned_kb=$(( (size_bytes + 1023) / 1024 ))
+        printf 'DRY-RUN: would remove %s\n' "$target_file"
+    else
+        rm -f -- "$target_file" 2>/dev/null && [ ! -e "$target_file" ] || return 3
+    fi
+    removed=$((removed + 1))
+    gain_kb=$((gain_kb + planned_kb))
+    return 0
+}
+cleanup() {
+    dry=0
+    case ${1:-} in
+        '') ;;
+        --dry-run) dry=1 ;;
+        *) echo 'Usage: nvr.sh cleanup [--dry-run]' >&2; return 2;;
+    esac
+    if [ "$dry" -eq 1 ]; then
+        if ! mounted_rw || [ ! -d "$NVR_BASE_DIR" ]; then
+            echo 'NVR dry-run: archive not mounted read-write' >&2
+            return 1
+        fi
+    else
+        if ! disk_ok; then
+            save_cleanup_state FAILED 0 0
+            notify_event WARN cleanup-error 'archive cleanup failed: storage unavailable'
+            return 1
+        fi
+        disk_health
+    fi
+    removed=0; failed=0; skipped=0; gain_kb=0
+    if [ "$STORAGE_MODE" != time ] && ! safe_archive; then
+        echo 'NVR cleanup: unsafe archive path; refusing to delete' >&2
+        [ "$dry" -eq 1 ] || save_cleanup_state FAILED 0 1
+        return 1
+    fi
+    cutoff=$((NOW-RETENTION))
+    # TIME and HYBRID: expire only segments older than the selected horizon.
+    # CIRCULAR intentionally has no time horizon.
+    if [ "$STORAGE_MODE" != circular ]; then
+        for id in $CAMERAS; do
+            dir="$NVR_BASE_DIR/cam$id"
+            [ ! -L "$dir" ] || { skipped=$((skipped + 1)); continue; }
+            for file in "$dir"/cam"$id"_*.mkv; do
+                [ -f "$file" ] && [ ! -L "$file" ] || continue
+                age_mt=$(stat -c %Y "$file" 2>/dev/null) || { skipped=$((skipped + 1)); continue; }
+                isnum "$age_mt" || { skipped=$((skipped + 1)); continue; }
+                [ "$age_mt" -lt "$cutoff" ] || continue
+                if delete_segment "$file" "$id" "$age_mt"; then :; else
+                    rc=$?
+                    case "$rc" in 1) :;; 2) skipped=$((skipped + 1));; *) failed=$((failed + 1));; esac
+                fi
+            done
+        done
+    fi
+    # CIRCULAR/HYBRID: remove globally oldest closed MKVs only when free
+    # space is below the configured reserve. Never enter other directories.
+    if [ "$STORAGE_MODE" != time ]; then
+        goal=$(reserve_kb) || { failed=$((failed + 1)); goal=''; }
+        free=$(free_kb) || { failed=$((failed + 1)); free=''; }
+        if [ -n "$goal" ] && [ -n "$free" ] && [ $((free + gain_kb)) -lt "$goal" ]; then
+            unsorted=$(mktemp "$STATE/nvr-candidates.XXXXXX") || return 1
+            sorted=$(mktemp "$STATE/nvr-sorted.XXXXXX") || { rm -f "$unsorted"; return 1; }
+            scan_ok=1
+            for id in $CAMERAS; do
+                dir="$NVR_BASE_DIR/cam$id"
+                for file in "$dir"/cam"$id"_*.mkv; do
+                    [ -f "$file" ] && [ ! -L "$file" ] || continue
+                    candidate_mt=$(stat -c %Y "$file" 2>/dev/null) || { skipped=$((skipped + 1)); scan_ok=0; continue; }
+                    isnum "$candidate_mt" || { skipped=$((skipped + 1)); scan_ok=0; continue; }
+                    [ "$candidate_mt" -le "$NOW" ] || continue
+                    if [ "$STORAGE_MODE" = hybrid ] && [ "$candidate_mt" -lt "$cutoff" ]; then continue; fi
+                    case "$file" in *[!A-Za-z0-9_./%-]*) skipped=$((skipped + 1)); scan_ok=0; continue;; esac
+                    printf '%s\t%s\t%s\n' "$candidate_mt" "$id" "$file" >> "$unsorted"
+                done
+            done
+            if [ "$scan_ok" -eq 0 ]; then
+                # If a candidate can't be safely classified, preserve all
+                # remaining files rather than evict a potentially newer one.
+                :
+            elif LC_ALL=C sort -n "$unsorted" > "$sorted"; then
+                while IFS="$(printf '\t')" read -r candidate_mt id file; do
+                    current=$(free_kb) || { failed=$((failed + 1)); break; }
+                    [ $((current + gain_kb)) -lt "$goal" ] || break
+                    if delete_segment "$file" "$id" "$candidate_mt"; then :; else
+                        rc=$?
+                        case "$rc" in
+                            1) : ;;
+                            2) skipped=$((skipped + 1)); break ;;
+                            *) failed=$((failed + 1)); break ;;
+                        esac
+                    fi
+                done < "$sorted"
+            else
+                failed=$((failed + 1))
+            fi
+            rm -f "$unsorted" "$sorted"
+        fi
+    fi
     if [ "$failed" -gt 0 ]; then result=FAILED
     elif [ "$skipped" -gt 0 ]; then result=PARTIAL
     else result=OK
     fi
+    if [ "$dry" -eq 1 ]; then
+        echo "DRY-RUN STORAGE MODE: $STORAGE_MODE; candidates=$removed skipped=$skipped failed=$failed"
+        [ "$result" = OK ]
+        return
+    fi
     save_cleanup_state "$result" "$removed" "$skipped"
     if [ "$removed" -gt 0 ] || [ "$result" != OK ]; then
-        log "INFO retention cleanup removed=$removed skipped=$skipped failed=$failed result=$result"
+        log "INFO $STORAGE_MODE cleanup removed=$removed skipped=$skipped failed=$failed result=$result"
     fi
-    # Persistent cleanup incidents are alerted independently of last run time.
     if [ "$result" = OK ]; then
         notify_event RECOVERY cleanup-error 'archive cleanup is successful again'
     else
         notify_event WARN cleanup-error "archive cleanup $result: removed=$removed skipped=$skipped failed=$failed"
     fi
-    # Disk alerts only; NEVER evict video because of free-space pressure.
     forecast_space
     [ "$result" = OK ]
 }
@@ -745,11 +888,11 @@ case ${1:-status} in
   check) lock || exit 0; is_paused && exit 0; check ;;
   start|resume) lock || { echo 'NVR: controller busy' >&2; exit 1; }; do_start ;;
   stop|pause) lock || { echo 'NVR: controller busy' >&2; exit 1; }; do_stop ;;
-  cleanup) lock || exit 0; cleanup ;;
+  cleanup) shift; lock || exit 0; cleanup "${1:-}" ;;
   logs) shift; logs_cmd "${1:-50}" ;;
   notify)
       [ "${2:-}" = test ] || { echo 'Usage: nvr.sh notify test' >&2; exit 2; }
       notify_test ;;
-  *) echo 'Usage: nvr.sh {start|resume|check|status|stop|pause|cleanup|logs [lines|cam<ID>]|notify test}' >&2; exit 2;;
+  *) echo 'Usage: nvr.sh {start|resume|check|status|stop|pause|cleanup [--dry-run]|logs [lines|cam<ID>]|notify test}' >&2; exit 2;;
 esac
 fi

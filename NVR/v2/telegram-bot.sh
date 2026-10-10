@@ -76,7 +76,7 @@ render_reply() {
     cmd=$1
     case $cmd in
         /start|/start@*|/help|/help@*)
-            printf 'Keenetic NVR v2.4\n/status - disk, cameras, cron and archive\n/cameras - recording status per camera\n/disk - free space and cleanup\n/help - command list\n\nRead-only bot: camera control is not available.\n' ;;
+            printf 'Keenetic NVR v2.5\n/status - disk, cameras, cron and archive\n/cameras - recording status per camera\n/disk - free space and cleanup\n/help - command list\n\nRead-only bot: camera control is not available.\n' ;;
         /status|/status@*)
             printf 'NVR status (%s)\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')"
             nvr_report ;;
@@ -86,7 +86,7 @@ render_reply() {
             ;;
         /disk|/disk@*)
             report=$(nvr_report)
-            printf '%s\n' "$report" | sed -n '1p;/^DISK:/p;/^RETENTION:/p;/^LAST CLEANUP:/p;/^LAST SUCCESSFUL CLEANUP:/p;/^REMOVED FILES:/p'
+            printf '%s\n' "$report" | sed -n '1p;/^DISK:/p;/^STORAGE MODE:/p;/^RETENTION:/p;/^FREE RESERVE:/p;/^LAST CLEANUP:/p;/^LAST SUCCESSFUL CLEANUP:/p;/^REMOVED FILES:/p'
             ;;
         /*) printf 'Unknown read-only command. Send /help.\n' ;;
         *) return 2 ;;
