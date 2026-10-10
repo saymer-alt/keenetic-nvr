@@ -4,8 +4,9 @@ on:
   push:
     branches: [main, 'nvr/**']
     paths: ['NVR/**', 'tests/**', '.github/workflows/nvr-ci.yml', 'README.md', 'setup.sh', '.gitattributes', 'legacy/**']
+  # Required check must run on EVERY pull request, including docs-only changes.
+  # Otherwise a protected main branch can get stuck waiting for a skipped job.
   pull_request:
-    paths: ['NVR/**', 'tests/**', '.github/workflows/nvr-ci.yml', 'README.md', 'setup.sh']
 
 jobs:
   nvr:
