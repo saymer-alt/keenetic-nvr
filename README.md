@@ -39,21 +39,46 @@
 
 Нужны Keenetic с Entware, отдельный USB-диск **EXT4** под видеоархив (не системный диск Entware), доступ к RTSP и пакеты `ffmpeg`, `cron`, `curl`, `coreutils-stat`. Интерактивный установщик поможет поставить недостающие пакеты.
 
-В SSH **нового** роутера:
+На **новом** роутере с уже установленным Entware, подключённым отдельным
+USB-диском EXT4 и открытым интерактивным SSH-терминалом запустите **одну команду**:
 
 ```sh
-curl -fSsL https://raw.githubusercontent.com/saymer-alt/keenetic-nvr/main/NVR/v2/bootstrap.sh -o /tmp/nvr-install.sh
-sh /tmp/nvr-install.sh preflight-fresh
+opkg update && opkg install curl && \
+curl -fSsL https://raw.githubusercontent.com/saymer-alt/keenetic-nvr/main/setup.sh | sh
 ```
 
-Если проверки успешны:
+Это запускает **полную установку**, а не только preflight:
+загрузчик проверит Entware, предложит установить недостающие
+`ffmpeg`, `cron` и `coreutils-stat`, затем мастер спросит диск,
+RTSP IP/логин/пароль (ввод скрыт), каналы, необязательные уведомления
+и убедится, что появился свежий MKV каждой камеры. После проверки
+добавятся задания Cron. Архивный диск не должен совпадать с диском Entware.
+
+**Вариант с проверкой успешности скачивания `curl` и без передачи сети напрямую в shell**
+(предпочтителен при нестабильном подключении):
 
 ```sh
-sh /tmp/nvr-install.sh install-fresh
-sh /opt/etc/nvr-v2.sh status
+opkg update && opkg install curl && \
+curl -fSsL https://raw.githubusercontent.com/saymer-alt/keenetic-nvr/main/setup.sh \
+  -o /tmp/keenetic-nvr-setup.sh && \
+sh -n /tmp/keenetic-nvr-setup.sh && sh /tmp/keenetic-nvr-setup.sh
 ```
 
-Установщик запросит диск, RTSP-учётные данные и каналы. Пароль вводится скрыто. Конфигурация: `/opt/etc/nvr-v2.conf`, права `600`. **Чистая установка пока проверена в CI, но не подтверждена на втором физическом Keenetic.**
+Только предварительная проверка (может предложить доустановить пакеты):
+
+```sh
+sh /tmp/keenetic-nvr-setup.sh preflight
+```
+
+Последняя команда предполагает, что вы скачали файл вторым способом.
+
+Установщик запросит параметры через `/dev/tty`, поэтому работает и
+при `curl | sh`. Для **уже установленной** v2.4 повторная установка
+блокируется: используйте команды статуса или отдельный сценарий обновления.
+Конфигурация: `/opt/etc/nvr-v2.conf`, права `600`.
+
+**Чистая установка ещё не подтверждена на втором физическом Keenetic**:
+офлайн-тесты в CI не заменяют эту проверку.
 
 ### Обновление действующей v2.3
 
@@ -112,12 +137,14 @@ sh tests/fresh-config-smoke.sh
 sh tests/telegram-bot-commands.sh
 sh tests/secrets-scan.sh
 sh tests/source-links.sh
+sh tests/setup-entrypoint.sh
 ```
 
 ### Структура
 
 | Путь | Назначение |
 | --- | --- |
+| [setup.sh](setup.sh) | Быстрый установщик на новый Keenetic через `curl | sh` |
 | [NVR/v2/README.md](NVR/v2/README.md) | Полная инструкция установки, обновления и диагностики |
 | [NVR/v2/nvr.sh](NVR/v2/nvr.sh) | Запись RTSP, watchdog, очистка и диагностика |
 | [NVR/v2/telegram-bot.sh](NVR/v2/telegram-bot.sh) | Ответы на команды Telegram (только чтение) |

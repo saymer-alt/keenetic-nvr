@@ -214,8 +214,45 @@ sh /tmp/nvr-telegram-bot-install.sh remove
 
 ## Установка с нуля (другой Keenetic, без старого NVR)
 
-Требования: Keenetic с Entware, отдельный USB-накопитель EXT4 (не системный диск
-Entware), интерактивная SSH-сессия (`ssh -t`).
+Требования: Keenetic с **уже установленным Entware**, отдельный USB-накопитель
+**EXT4** (не системный диск Entware), интерактивная SSH-сессия (`ssh -t`).
+Мастер выбирает доступный RW-диск; тип файловой системы EXT4 нужно
+обеспечить заранее.
+
+**Одна команда для новой установки** (аналогично keenetic-auto-setup):
+
+```sh
+opkg update && opkg install curl && \
+curl -fSsL https://raw.githubusercontent.com/saymer-alt/keenetic-nvr/main/setup.sh | sh
+```
+
+Корневой `setup.sh` проверяет Entware и терминал, скачивает
+`NVR/v2/bootstrap.sh` из текущего репозитория, проверяет его синтаксис
+и запускает **`install-fresh`**. Никакие RTSP-пароли не вводятся в командной
+строке. Для выбора диска и скрытого ввода пароля скрипты читают
+`/dev/tty`, поэтому `curl | sh` совместим с интерактивным мастером.
+Отказ скачивания виден как ошибка curl, но exit-код всей цепочки
+`curl | sh` не всегда отражает эту ошибку: для контролируемого запуска
+скачайте файл отдельно:
+
+```sh
+opkg update && opkg install curl && \
+curl -fSsL https://raw.githubusercontent.com/saymer-alt/keenetic-nvr/main/setup.sh -o /tmp/nvr-setup.sh && \
+sh -n /tmp/nvr-setup.sh && sh /tmp/nvr-setup.sh
+```
+
+При наличии `/opt/etc/nvr-v2.sh` или `/opt/etc/nvr-v2.conf`
+`setup.sh` отказывается переустанавливать NVR — работающие камеры
+не будут случайно прерваны.
+
+**Только preflight**, без настройки записи (`prerequisites` может
+предложить установить недостающие Entware-пакеты с подтверждением):
+
+```sh
+sh /tmp/nvr-setup.sh preflight
+```
+
+### Ручной способ через bootstrap.sh (для диагностики)
 
 1. Компоненты (установщик предложит установить сам, но можно заранее):
 
