@@ -5,11 +5,11 @@ umask 077
 ACTION=${1:-}
 case "$ACTION" in
     preflight|switch|preflight-fresh|install-fresh|configure-fresh|preflight-upgrade|upgrade) ;;
-    *) echo 'Usage: bootstrap.sh {preflight|switch|preflight-fresh|install-fresh|configure-fresh}' >&2; exit 2;;
+    *) echo 'Usage: bootstrap.sh {preflight|switch|preflight-fresh|install-fresh|configure-fresh|preflight-upgrade|upgrade}' >&2; exit 2;;
 esac
 # The default follows the published main branch. To test a development branch,
 # export NVR_RAW_BASE=<raw URL base of that branch> before running.
-RAW=${NVR_RAW_BASE:-https://raw.githubusercontent.com/saymer-alt/keenetic-knowledge-base/main/NVR/v2}
+RAW=${NVR_RAW_BASE:-https://raw.githubusercontent.com/saymer-alt/keenetic-nvr/main/NVR/v2}
 if ! command -v curl >/dev/null 2>&1; then
     echo 'curl missing. Install: opkg update && opkg install curl' >&2
     exit 1
