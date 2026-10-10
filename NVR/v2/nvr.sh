@@ -1,8 +1,8 @@
 #!/bin/sh
-# Keenetic/Entware NVR v2.4 — supervised ffmpeg stream-copy recorder.
+# Keenetic/Entware NVR v2.5 — supervised ffmpeg stream-copy recorder.
 # Each cron tick is independent; no persistent shell watchdog.
-# Retention contract: every finished segment is kept at least NVR_RETENTION_SECONDS
-# (default 259200 = 72 h) measured by file mtime. Fullness NEVER shortens it.
+# Safe default: time-based retention, at least 72h of finished segments.
+# Circular and hybrid modes explicitly opt into capacity-based eviction.
 set -u
 umask 077
 PATH=/opt/bin:/opt/sbin:/bin:/sbin:/usr/bin:/usr/sbin
@@ -18,6 +18,10 @@ CAMERAS=${NVR_CAMERAS:-'101 201 301'}
 STALE=${NVR_STALE_SECONDS:-720}
 GRACE=${NVR_GRACE_SECONDS:-600}
 RETENTION=${NVR_RETENTION_SECONDS:-259200}
+STORAGE_MODE=${NVR_STORAGE_MODE:-time}
+RESERVE_PCT=${NVR_DISK_FREE_RESERVE_PERCENT:-10}
+RESERVE_MIN_MB=${NVR_DISK_FREE_MIN_MB:-128}
+DFBIN=${NVR_DF_BIN:-df}
 DISK_WARN=${NVR_DISK_WARN_PERCENT:-75}
 DISK_CRIT=${NVR_DISK_CRIT_PERCENT:-90}
 SEGMENT=900
@@ -42,11 +46,14 @@ numfile() { v=$(cat "$1" 2>/dev/null) || v=0; isnum "$v" || v=0; printf '%s\n' "
 for id in $CAMERAS; do
     isnum "$id" || { echo 'NVR: numeric camera IDs required' >&2; exit 2; }
 done
-for v in "$STALE" "$GRACE" "$RETENTION" "$DISK_WARN" "$DISK_CRIT" \
+for v in "$STALE" "$GRACE" "$RETENTION" "$DISK_WARN" "$DISK_CRIT" "$RESERVE_PCT" "$RESERVE_MIN_MB" \
          "$CLEANUP_STALE" "$NOTIFY_REPEAT" "$NOTIFY_TIMEOUT" "$RTSP_ENCODE"; do
     isnum "$v" || { echo 'NVR: invalid numeric configuration' >&2; exit 2; }
 done
-[ "$STALE" -ge 120 ] && [ "$RETENTION" -ge 259200 ] && \
+case "$STORAGE_MODE" in time|circular|hybrid) ;; *) echo 'NVR: invalid NVR_STORAGE_MODE (time|circular|hybrid)' >&2; exit 2;; esac
+[ "$STALE" -ge 120 ] && [ "$RETENTION" -ge 3600 ] && [ "$RETENTION" -le 315360000 ] && \
+[ "$RESERVE_PCT" -ge 1 ] && [ "$RESERVE_PCT" -le 50 ] && \
+[ "$RESERVE_MIN_MB" -le 1048576 ] && \
 [ "$DISK_WARN" -ge 1 ] && [ "$DISK_WARN" -le 100 ] && \
 [ "$DISK_CRIT" -ge "$DISK_WARN" ] && [ "$DISK_CRIT" -le 100 ] && \
 [ "$RTSP_ENCODE" -le 1 ] && [ "$NOTIFY_TIMEOUT" -ge 1 ] && \
@@ -81,12 +88,12 @@ log() {
     fi
 }
 usage_pct() {
-    u=$(df -P "$NVR_MOUNT" 2>/dev/null | awk 'NR==2 {gsub(/%/, "", $5); print $5}')
+    u=$("$DFBIN" -P "$NVR_MOUNT" 2>/dev/null | awk 'NR==2 {gsub(/%/, "", $5); print $5}')
     isnum "$u" || return 1
     printf '%s\n' "$u"
 }
 free_kb() {
-    u=$(df -P -k "$NVR_MOUNT" 2>/dev/null | awk 'NR==2 {print $4}')
+    u=$("$DFBIN" -P -k "$NVR_MOUNT" 2>/dev/null | awk 'NR==2 {print $4}')
     isnum "$u" || return 1
     printf '%s\n' "$u"
 }
@@ -455,6 +462,8 @@ disk_health() {
 # retention horizon. Only real recording files are counted; without them the
 # estimate is skipped instead of guessed.
 forecast_space() {
+    # Capacity modes explicitly permit early eviction; no guaranteed hour horizon.
+    [ "$STORAGE_MODE" = time ] || return 0
     total=0
     for id in $CAMERAS; do
         for f in "$NVR_BASE_DIR/cam$id"/cam"$id"_*.mkv; do
@@ -595,7 +604,7 @@ status() {
         cam_report="${cam_report}CAM $id: $state, last write $disp
 "
     done
-    echo "NVR v2.4 - $overall"
+    echo "NVR v2.5 - $overall"
     if mounted_rw; then
         u=$(usage_pct) || u=unknown
         free=$(free_kb) || free=unknown
@@ -606,7 +615,14 @@ status() {
     else
         echo 'DISK: NOT MOUNTED/READ-ONLY'
     fi
-    echo "RETENTION: $(( RETENTION / 3600 )) hours"
+    echo "STORAGE MODE: $STORAGE_MODE"
+    case "$STORAGE_MODE" in
+        circular) echo 'RETENTION: capacity-based (no minimum)' ;;
+        *) echo "RETENTION: $(( RETENTION / 3600 )) hours" ;;
+    esac
+    if [ "$STORAGE_MODE" != time ]; then
+        echo "FREE RESERVE: ${RESERVE_PCT}% (minimum ${RESERVE_MIN_MB} MB)"
+    fi
     echo "SEGMENT: $SEGMENT seconds"
     case $last_check_age in
         unknown) echo "LAST CHECK: ${CHECK_LAST_HUMAN:-never}";;
@@ -651,7 +667,7 @@ notify_test() {
         echo 'NVR_NOTIFY_WEBHOOK_URL to /opt/etc/nvr-v2.conf (mode 600), then re-run this test.'
         return 2
     fi
-    msg='test notification from NVR v2.4'
+    msg='test notification from NVR v2.5'
     if send_notify TEST notify-test "$msg"; then
         echo "Test notification delivered. telegram=${TG_CODE:-skipped} webhook=${WH_CODE:-skipped}"
         return 0
