@@ -137,12 +137,14 @@ sh tests/fresh-config-smoke.sh
 sh tests/telegram-bot-commands.sh
 sh tests/secrets-scan.sh
 sh tests/source-links.sh
+sh tests/setup-entrypoint.sh
 ```
 
 ### Структура
 
 | Путь | Назначение |
 | --- | --- |
+| [setup.sh](setup.sh) | Быстрый установщик на новый Keenetic через `curl | sh` |
 | [NVR/v2/README.md](NVR/v2/README.md) | Полная инструкция установки, обновления и диагностики |
 | [NVR/v2/nvr.sh](NVR/v2/nvr.sh) | Запись RTSP, watchdog, очистка и диагностика |
 | [NVR/v2/telegram-bot.sh](NVR/v2/telegram-bot.sh) | Ответы на команды Telegram (только чтение) |
