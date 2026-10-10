@@ -8,7 +8,14 @@ RTSP_IP='192.168.1.135'
 NVR_CAMERAS='101 201 301'
 NVR_STALE_SECONDS=720
 NVR_GRACE_SECONDS=600
+# Storage policy: time | circular | hybrid. Safe default: time + 72h.
+# Circular deletes oldest CLOSED MKV only at low free space.
+# Hybrid expires by age AND evicts early at low free space.
+# Capacity modes have no minimum retention guarantee.
+NVR_STORAGE_MODE='time'
 NVR_RETENTION_SECONDS=259200
+NVR_DISK_FREE_RESERVE_PERCENT=10
+NVR_DISK_FREE_MIN_MB=128
 NVR_DISK_WARN_PERCENT=75
 NVR_DISK_CRIT_PERCENT=90
 # Optional: retry auto-restarts less/more aggressively (defaults shown).
