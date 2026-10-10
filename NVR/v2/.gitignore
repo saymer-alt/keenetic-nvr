@@ -1,0 +1,14 @@
+# Local credentials are NEVER part of the public source.
+nvr-v2.conf
+nvr.conf
+*.local.conf
+*.secret
+*.secrets
+.env
+.env.*
+*.mkv
+*.log
+*.pid
+backups/
+*.state
+paused

@@ -1,0 +1,23 @@
+# EXAMPLE ONLY. Installers create /opt/etc/nvr-v2.conf with actual RTSP credentials.
+# NEVER publish the actual config or RTSP URLs from ps/logs.
+NVR_MOUNT='/tmp/mnt/YOUR_DISK_UUID'
+NVR_BASE_DIR='/tmp/mnt/YOUR_DISK_UUID/cctv'
+RTSP_USER='YOUR_USER'
+RTSP_PASS='YOUR_CAMERA_PASSWORD'
+RTSP_IP='192.168.1.135'
+NVR_CAMERAS='101 201 301'
+NVR_STALE_SECONDS=720
+NVR_GRACE_SECONDS=600
+NVR_RETENTION_SECONDS=259200
+NVR_DISK_WARN_PERCENT=75
+NVR_DISK_CRIT_PERCENT=90
+# Optional: retry auto-restarts less/more aggressively (defaults shown).
+# NVR_CLEANUP_STALE_SECONDS=7200
+# Optional notifications (leave absent for fully standalone operation).
+# NVR_NOTIFY_TELEGRAM_TOKEN='123456789:YOUR_BOT_TOKEN_FROM_BOTFATHER'
+# NVR_NOTIFY_TELEGRAM_CHAT='123456789'
+# NVR_NOTIFY_WEBHOOK_URL='https://example.invalid/nvr-hook'
+# NVR_NOTIFY_REPEAT_SECONDS=21600
+# NVR_NOTIFY_TIMEOUT=10
+# Optional: 1 = percent-encode RTSP userinfo (only if the installer verified it).
+# NVR_RTSP_ENCODE=0

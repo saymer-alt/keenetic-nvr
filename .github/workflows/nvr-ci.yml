@@ -1,0 +1,45 @@
+name: NVR checks
+
+on:
+  push:
+    branches: [main, 'nvr/**']
+    paths: ['NVR/**', 'tests/**', '.github/workflows/nvr-ci.yml']
+  pull_request:
+    paths: ['NVR/**', 'tests/**', '.github/workflows/nvr-ci.yml']
+
+jobs:
+  nvr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install busybox
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq busybox shellcheck
+
+      - name: Shell syntax (POSIX sh + BusyBox ash)
+        run: |
+          for f in NVR/v2/nvr.sh NVR/v2/install-router.sh NVR/v2/fresh-install.sh NVR/v2/bootstrap.sh tests/smoke.sh tests/retention-cases.sh tests/notify-logic.sh tests/secrets-scan.sh tests/fresh-config-smoke.sh; do
+            sh -n "$f"
+            busybox sh -n "$f"
+          done
+
+      - name: ShellCheck (errors only)
+        run: shellcheck -S error NVR/v2/*.sh tests/*.sh
+
+      - name: BusyBox smoke
+        run: sh tests/smoke.sh
+
+      - name: Retention matrix
+        run: sh tests/retention-cases.sh
+
+      - name: Notification logic
+        run: sh tests/notify-logic.sh
+
+      - name: Credential quoting helpers
+        run: sh tests/fresh-config-smoke.sh
+
+      - name: Secret scan
+        run: sh tests/secrets-scan.sh
