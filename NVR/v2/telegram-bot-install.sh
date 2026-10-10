@@ -3,7 +3,7 @@
 set -eu
 umask 077
 PATH=/opt/bin:/opt/sbin:/bin:/sbin:/usr/bin:/usr/sbin
-RAW=${NVR_BOT_RAW_BASE:-https://raw.githubusercontent.com/saymer-alt/keenetic-knowledge-base/main/NVR/v2}
+RAW=${NVR_BOT_RAW_BASE:-https://raw.githubusercontent.com/saymer-alt/keenetic-nvr/main/NVR/v2}
 DEST=/opt/etc/nvr-telegram-bot.sh
 CRON_INIT=/opt/etc/init.d/S10cron
 CRON_LINE='* * * * * /bin/sh /opt/etc/nvr-telegram-bot.sh poll'

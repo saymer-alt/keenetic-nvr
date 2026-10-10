@@ -1,7 +1,7 @@
 # Keenetic NVR v2.4 — резервный видеорегистратор 72 часа на камеру
 
-> **План выделения в отдельный репозиторий:** [REPOSITORY-EXTRACTION.md](REPOSITORY-EXTRACTION.md).
-> Пока канонический исходный код остаётся в этом репозитории: новый репозиторий не создан.
+> **Основной репозиторий:** [saymer-alt/keenetic-nvr](https://github.com/saymer-alt/keenetic-nvr).
+> Проект выделен из [keenetic-knowledge-base](https://github.com/saymer-alt/keenetic-knowledge-base); историю переноса см. в [REPOSITORY-EXTRACTION.md](REPOSITORY-EXTRACTION.md).
 
 **Статус: v2.4 находится в main и работает на домашнем KN-1012 (10.10.2026).**
 На реальном Keenetic подтверждены: три HEALTHY-камеры, FFmpeg 6.1.4,
@@ -123,7 +123,7 @@ NVR отправляет:
 3. На роутере запустить:
 
 ```sh
-curl -fSsL https://raw.githubusercontent.com/saymer-alt/keenetic-knowledge-base/main/NVR/v2/telegram-setup.sh -o /tmp/nvr-telegram-setup.sh
+curl -fSsL https://raw.githubusercontent.com/saymer-alt/keenetic-nvr/main/NVR/v2/telegram-setup.sh -o /tmp/nvr-telegram-setup.sh
 sh -n /tmp/nvr-telegram-setup.sh && sh /tmp/nvr-telegram-setup.sh
 ```
 
@@ -175,7 +175,7 @@ opkg install jq
 Загрузить небольшой установщик и проверить требования:
 
 ```sh
-curl -fSsL https://raw.githubusercontent.com/saymer-alt/keenetic-knowledge-base/main/NVR/v2/telegram-bot-install.sh -o /tmp/nvr-telegram-bot-install.sh
+curl -fSsL https://raw.githubusercontent.com/saymer-alt/keenetic-nvr/main/NVR/v2/telegram-bot-install.sh -o /tmp/nvr-telegram-bot-install.sh
 sh -n /tmp/nvr-telegram-bot-install.sh
 sh /tmp/nvr-telegram-bot-install.sh preflight
 ```
@@ -227,12 +227,14 @@ opkg install ffmpeg cron curl coreutils-stat
 2. Загрузить установщик и проверить окружение (ничего не меняет):
 
 ```sh
-curl -fSsL https://raw.githubusercontent.com/saymer-alt/keenetic-knowledge-base/main/NVR/v2/bootstrap.sh -o /tmp/nvr-install.sh
+curl -fSsL https://raw.githubusercontent.com/saymer-alt/keenetic-nvr/main/NVR/v2/bootstrap.sh -o /tmp/nvr-install.sh
 sh /tmp/nvr-install.sh preflight-fresh
 ```
 
-Ссылки ведут на ветку `main` и заработают сразу после слияния PR #3; для проверки
-ветки-кандидата используйте `NVR_RAW_BASE=https://raw.githubusercontent.com/saymer-alt/keenetic-knowledge-base/nvr/watchdog-v2-candidate/NVR/v2`.
+Установщик по умолчанию загружает остальные компоненты из `main`
+**этого репозитория**. Для воспроизводимого развертывания можно закрепить
+конкретный commit SHA через переменную `NVR_RAW_BASE`.
+Старые URL из базы знаний оставлены доступными для уже установленного NVR.
 
 3. Установка:
 
@@ -270,7 +272,7 @@ crontab-ы сохраняются в `/opt/etc/nvr-v2-backup`; RTSP-параме
 старого скрипта локально; при сбое — автоматический откат.
 
 ```sh
-curl -fSsL https://raw.githubusercontent.com/saymer-alt/keenetic-knowledge-base/main/NVR/v2/bootstrap.sh -o /tmp/nvr-install.sh
+curl -fSsL https://raw.githubusercontent.com/saymer-alt/keenetic-nvr/main/NVR/v2/bootstrap.sh -o /tmp/nvr-install.sh
 sh /tmp/nvr-install.sh preflight   # только проверка
 sh /tmp/nvr-install.sh switch      # переключение
 sh /opt/etc/nvr-v2-backup/rollback.sh rollback   # откат, если понадобится
@@ -286,15 +288,15 @@ v2.3 не блокирует автоматический перезапуск �
 Для обновления добавлен `upgrade-router.sh` с отдельным бэкапом, временным
 отключением только NVR Cron, проверкой трёх камер и автоматическим откатом.
 
-До слияния PR #3 загрузите версию из проверенной ветки:
+Для уже работающей **v2.3** (это не команда переустановки v2.4)
+используйте опубликованный загрузчик:
 
 ```sh
-curl -fSsL https://raw.githubusercontent.com/saymer-alt/keenetic-knowledge-base/nvr/watchdog-v2-candidate/NVR/v2/bootstrap.sh -o /tmp/nvr-upgrade.sh
-export NVR_RAW_BASE=https://raw.githubusercontent.com/saymer-alt/keenetic-knowledge-base/nvr/watchdog-v2-candidate/NVR/v2
+curl -fSsL https://raw.githubusercontent.com/saymer-alt/keenetic-nvr/main/NVR/v2/bootstrap.sh -o /tmp/nvr-upgrade.sh
 sh /tmp/nvr-upgrade.sh preflight-upgrade
 ```
 
-Если проверка PASS и владелец разрешил тестовый переход:
+Только после успешного preflight можно выполнять переключение:
 
 ```sh
 sh /tmp/nvr-upgrade.sh upgrade
@@ -311,9 +313,12 @@ sh /opt/etc/nvr-v24-upgrade-backup/rollback.sh rollback
 
 Ручной rollback возвращает снимок root crontab: проверьте, что после
 обновления в нём не появились новые, не включённые в бэкап задания.
-Перед `main` необходим live-тест на реальном Keenetic.
-Для воспроизводимого обновления предпочтительно зафиксировать commit SHA
-в `NVR_RAW_BASE`, а не постоянно движущуюся ветку.
+Обновление v2.3 → v2.4 реально выполнено 10.10.2026 на KN-1012
+с сообщением `NVR upgrade PASS` и подтверждённой записью трёх камер.
+Воспроизведение отката при ошибке **отдельно не тестировалось**.
+Для воспроизводимого обновления фиксируйте commit SHA через `NVR_RAW_BASE`,
+а не постоянно движущуюся ветку.
+
 ## Диагностика типовых ситуаций
 
 - `CAM 101: DOWN` дольше 30 минут → смотреть `nvr logs cam101` и `nvr status`;
@@ -366,21 +371,34 @@ rm -rf /tmp/nvr-v2
   отдельная ограниченная учётная запись только для RTSP. Не публикуйте `ps w`,
   логи камер и содержимое конфига.
 - CI репозитория выполняет: синтаксис POSIX sh + BusyBox ash, ShellCheck
-  (errors), 5 офлайн-тестов, сканер секретов (токены Telegram, RTSP-URL
+  (errors), офлайн-тесты, сканер секретов (токены Telegram, RTSP-URL
   с паролями, приватные ключи).
 
-## Что осталось проверить на живом роутере (после v2.3 cutover)
+## Аппаратные испытания: KN-1012, 10 октября 2026
 
-Офлайн-проверки не заменяют живое испытание; объявлять их выполненными нельзя:
+Реальный результат эксплуатации, отдельно от CI. Подробные даты и команды —
+в [CHANGELOG.md](CHANGELOG.md). Наличие `HEALTHY` не доказывает успешность
+всех возможных сценариев восстановления.
 
-1. Первая фактическая очистка по cron в HH:03 и удаление файлов старше 72 часов
-   (не подтверждено на v2.3; в v2.4 добавлен статус `LAST CLEANUP` для контроля).
-2. Восстановление одной зависшей камеры без остановки остальных.
-3. Поведение после перезагрузки роутера (запись восстанавливается, пауза сохраняется).
-4. Чистая установка `install-fresh` на втором Keenetic.
-5. Доставка уведомлений Telegram/webhook с реальным роутера (`nvr notify test`).
-6. Пригодность созданных MKV (15-минутная нарезка) для воспроизведения/склейки —
-   офлайн-стаб не эмулирует реальный контейнер; проверить `ffprobe` на устройстве.
+| Сценарий | Результат |
+| --- | --- |
+| Обновление установленной v2.3 до v2.4, сохранение Cron | **PASS** — `NVR upgrade PASS` |
+| Потоки 101/201/301, процессы FFmpeg, свежие MKV | **PASS** — все три `HEALTHY` |
+| USB-диск, контроль свободного места, статус | **PASS** — RW, около 21% занято |
+| Проверка по Cron каждые 5 минут | **PASS** — подтверждён `LAST CHECK` |
+| Запуск очистки по Cron в HH:03 | **PASS** — 15:03:01, `OK`, 0 удалённых файлов |
+| Отправка уведомления через Telegram | **PASS** — HTTP 200, сообщение доставлено |
+| Telegram-запросы `/status`, `/cameras`, `/disk`, `/help` | **PASS** — реальные ответы 15:37–15:39 |
+| Удаление действительно устаревших MKV (>72 ч) | **Ещё не проверено на устройстве** |
+| Восстановление после принудительного падения камеры | **Ещё не проверено** |
+| Запись после перезагрузки/сохранение паузы | **Ещё не проверено** |
+| Контролируемый возврат v2.4 → v2.3 | **Ещё не проверено** |
+| Чистая установка на другом Keenetic | **Ещё не проверено** |
+| Фактическая воспроизводимость/длительность MKV через `ffprobe` | **Ещё не проверено** |
 
-См. также `ARCHITECTURE.md` (устройство) и `KNOWN-LIMITATIONS.md`
-(ограничения и backlog).
+**Важно:** Cron cleanup с `REMOVED FILES: 0` доказывает выполнение очистки,
+но не демонстрирует удаление файлов старше 72 часов. Офлайн-тесты этой
+логики есть в `tests/retention-cases.sh`.
+
+См. [ARCHITECTURE.md](ARCHITECTURE.md) и
+[KNOWN-LIMITATIONS.md](KNOWN-LIMITATIONS.md).
