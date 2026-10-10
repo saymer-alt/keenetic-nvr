@@ -162,4 +162,13 @@ mkdir -p "$T/state"
 NVR status | grep -q 'LAST CLEANUP: .* OK'
 NVR status | grep -q 'LAST SUCCESSFUL CLEANUP: '
 
-echo 'Retention matrix PASS (12 cases)'
+# 13) A partial pass does not replace the last fully successful cleanup.
+setup
+seg 101 successful $(( RET + 3600 ))
+NVR cleanup
+sed -i 's/^CLEANUP_OK_EPOCH=.*/CLEANUP_OK_EPOCH=1000000000/; s/^CLEANUP_OK_HUMAN=.*/CLEANUP_OK_HUMAN=2001-09-09 01:46:40/' "$T/state/cleanup.state"
+NVR_CONFIG="$T/conf" NVR_LIB_ONLY=1 busybox sh -c '. NVR/v2/nvr.sh; save_cleanup_state PARTIAL 0 1'
+grep -q 'CLEANUP_RESULT=PARTIAL' "$T/state/cleanup.state"
+grep -q 'CLEANUP_OK_EPOCH=1000000000' "$T/state/cleanup.state"
+NVR status | grep -q 'LAST SUCCESSFUL CLEANUP: 2001-09-09 01:46:40'
+echo 'Retention matrix PASS (13 cases)'

@@ -102,4 +102,11 @@ NVR_CONFIG="$T/conf" busybox sh NVR/v2/nvr.sh notify test >/dev/null || {
   echo 'FAIL notify test must succeed with configured transports' >&2; exit 1
 }
 
+# 5) Webhook transport must not accept cleartext HTTP or expose tokens.
+sed 's#https://webhook.invalid/nvr#http://webhook.invalid/nvr#' "$T/conf" > "$T/insecure-conf"
+if NVR_CONFIG="$T/insecure-conf" busybox sh NVR/v2/nvr.sh status > "$T/out" 2> "$T/err"; then
+  echo 'FAIL insecure HTTP webhook accepted' >&2; exit 1
+fi
+grep -q 'must use HTTPS' "$T/err" || { echo 'FAIL cleartext webhook missing diagnostic' >&2; exit 1; }
+
 echo 'Notification logic PASS'
