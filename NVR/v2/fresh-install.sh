@@ -149,6 +149,45 @@ configure_notifications() {
         printf 'After installation verify with: sh %s notify test\n' "$RECORDER" > /dev/tty
     fi
 }
+choose_storage_policy() {
+    printf '\nArchive retention policy:\n' > /dev/tty
+    printf '  1) TIME — retain the selected number of hours, never evict early (safe default)\n' > /dev/tty
+    printf '  2) CIRCULAR — reclaim oldest closed MKV when disk reserve is low\n' > /dev/tty
+    printf '  3) HYBRID — expire by age AND reclaim early when disk reserve is low\n' > /dev/tty
+    ask 'Choose storage mode [1=TIME]: '
+    case ${answer:-1} in
+        1|time|TIME) storage_mode=time ;;
+        2|circular|CIRCULAR) storage_mode=circular ;;
+        3|hybrid|HYBRID) storage_mode=hybrid ;;
+        *) fail 'Storage mode must be 1, 2 or 3' ;;
+    esac
+    retention_hours=72
+    reserve_percent=10
+    reserve_min_mb=128
+    if [ "$storage_mode" != circular ]; then
+        ask 'Keep finished videos for how many hours [72] (examples 24/72/168/336): '
+        retention_hours=${answer:-72}
+        number "$retention_hours" && [ "$retention_hours" -ge 1 ] &&
+            [ "$retention_hours" -le 87600 ] ||
+            fail 'Retention must be 1..87600 hours'
+    fi
+    if [ "$storage_mode" != time ]; then
+        ask 'Reserve free disk space in percent [10] (1..50): '
+        reserve_percent=${answer:-10}
+        number "$reserve_percent" && [ "$reserve_percent" -ge 1 ] &&
+            [ "$reserve_percent" -le 50 ] ||
+            fail 'Disk free reserve must be 1..50 percent'
+        ask 'Absolute free-space floor in MB [128] (0..1048576): '
+        reserve_min_mb=${answer:-128}
+        number "$reserve_min_mb" && [ "$reserve_min_mb" -le 1048576 ] ||
+            fail 'Absolute reserve must be 0..1048576 MB'
+        printf 'WARNING: %s permits permanent deletion of footage before 72 hours.\n' "$storage_mode" > /dev/tty
+        ask 'Confirm capacity-based deletion (type DELETE): '
+        [ "$answer" = DELETE ] ||
+            fail 'Capacity-based deletion was not confirmed'
+    fi
+    retention_seconds=$((retention_hours * 3600))
+}
 configure() {
     [ -r /dev/tty ] && [ -w /dev/tty ] || fail 'Run through interactive SSH with TTY'
     if [ -e "$CONFIG" ]; then
@@ -181,6 +220,7 @@ configure() {
         seen="$seen$id "
     done
     [ "$seen" != ' ' ] || fail 'At least one channel required'
+    choose_storage_policy
     temp=$(mktemp /opt/etc/.nvr-v2.conf.XXXXXX) || fail 'Cannot create temporary config'
     trap 'rm -f "$temp"' EXIT HUP INT TERM
     {
@@ -190,7 +230,11 @@ configure() {
         printf 'RTSP_USER='; quote_sh "$username"; printf '\n'
         printf 'RTSP_PASS='; quote_sh "$password"; printf '\n'
         printf 'NVR_CAMERAS='; quote_sh "$channels"; printf '\n'
-        printf 'NVR_RETENTION_SECONDS=259200\nNVR_DISK_WARN_PERCENT=75\nNVR_DISK_CRIT_PERCENT=90\n'
+        printf 'NVR_STORAGE_MODE='; quote_sh "$storage_mode"; printf '\n'
+        printf 'NVR_RETENTION_SECONDS=%s\n' "$retention_seconds"
+        printf 'NVR_DISK_FREE_RESERVE_PERCENT=%s\n' "$reserve_percent"
+        printf 'NVR_DISK_FREE_MIN_MB=%s\n' "$reserve_min_mb"
+        printf 'NVR_DISK_WARN_PERCENT=75\nNVR_DISK_CRIT_PERCENT=90\n'
     } > "$temp"
     chmod 600 "$temp"
     sh -n "$temp" || fail 'Generated config has invalid syntax'
@@ -261,7 +305,12 @@ schedule() {
     sed '/\/opt\/etc\/nvr-v2\.sh check/d; /\/opt\/etc\/nvr-v2\.sh cleanup/d' "$oldcron" > "$tempfile"
     rm -f "$oldcron" "$tempfile.err"
     printf '\n*/5 * * * * /bin/sh /opt/etc/nvr-v2.sh check\n' >> "$tempfile"
-    printf '3 * * * * /bin/sh /opt/etc/nvr-v2.sh cleanup\n' >> "$tempfile"
+    case ${NVR_STORAGE_MODE:-time} in
+        circular|hybrid)
+            printf '*/5 * * * * /bin/sh /opt/etc/nvr-v2.sh cleanup\n' >> "$tempfile" ;;
+        *)
+            printf '3 * * * * /bin/sh /opt/etc/nvr-v2.sh cleanup\n' >> "$tempfile" ;;
+    esac
     crontab "$tempfile" || fail 'Unable to install cron'
     "$CRON" restart || fail 'Unable to restart cron'
     rm -f "$tempfile"
