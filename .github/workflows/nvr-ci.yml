@@ -33,10 +33,10 @@ jobs:
         run: sh tests/smoke.sh
 
       - name: Retention matrix
-        run: sh -x tests/retention-cases.sh
+        run: sh tests/retention-cases.sh
 
       - name: Storage policy matrix
-        run: sh -x tests/storage-policies.sh
+        run: sh tests/storage-policies.sh
 
       - name: Notification logic
         run: sh tests/notify-logic.sh
