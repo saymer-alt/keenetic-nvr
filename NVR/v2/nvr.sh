@@ -715,7 +715,7 @@ segment_open() {
 eligible_segment() {
     candidate_file=$1; candidate_id=$2; expected_mt=${3:-}
     [ -f "$candidate_file" ] && [ ! -L "$candidate_file" ] || return 1
-    case "$candidate_file" in *[!A-Za-z0-9_./-]*) return 2;; esac
+    case "$candidate_file" in *[!A-Za-z0-9_./%-]*) return 2;; esac
     candidate_now=$(stat -c %Y "$candidate_file" 2>/dev/null) || return 2
     isnum "$candidate_now" || return 2
     [ "$candidate_now" -le "$NOW" ] || return 1
@@ -830,7 +830,7 @@ cleanup() {
                     isnum "$candidate_mt" || { skipped=$((skipped + 1)); continue; }
                     [ "$candidate_mt" -le "$NOW" ] || continue
                     if [ "$STORAGE_MODE" = hybrid ] && [ "$candidate_mt" -lt "$cutoff" ]; then continue; fi
-                    case "$file" in *[!A-Za-z0-9_./-]*) skipped=$((skipped + 1)); continue;; esac
+                    case "$file" in *[!A-Za-z0-9_./%-]*) skipped=$((skipped + 1)); continue;; esac
                     printf '%s\t%s\t%s\n' "$candidate_mt" "$id" "$file" >> "$unsorted"
                 done
             done
