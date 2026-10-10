@@ -35,7 +35,7 @@ EOT
 NVR() { NVR_CONFIG="$T/conf" busybox sh NVR/v2/nvr.sh "$@"; }
 
 # Status basics: a new installation without a healthy check is NOT healthy.
-NVR status | grep -q 'NVR v2.4 - DEGRADED'
+NVR status | grep -q 'NVR v2.5 - DEGRADED'
 NVR status | grep -q 'DISK: RW,'
 NVR status | grep -q 'RETENTION: 72 hours'
 NVR status | grep -q 'SEGMENT: 900 seconds'
@@ -59,21 +59,21 @@ NVR check
 [ "$(cat "$T/state/cam101.pid")" = "$p0" ]
 [ -f "$T/state/check.state" ]
 NVR status | grep -q 'LAST CHECK: '
-NVR status | grep -q 'NVR v2.4 - HEALTHY'
+NVR status | grep -q 'NVR v2.5 - HEALTHY'
 # Healthy FFmpeg files must not mask a stale / missing watchdog.
 printf 'CHECK_LAST_EPOCH=%s\nCHECK_LAST_HUMAN=2020-01-01 00:00:00\n' "$(( $(date +%s) - 900 ))" > "$T/state/check.state"
-NVR status | grep -q 'NVR v2.4 - DEGRADED'
+NVR status | grep -q 'NVR v2.5 - DEGRADED'
 NVR check
-NVR status | grep -q 'NVR v2.4 - HEALTHY'
+NVR status | grep -q 'NVR v2.5 - HEALTHY'
 # A dead ffmpeg is DOWN, even if its last output file is still recent.
 kill -TERM "$p201"
 sleep 1
 NVR status | grep -q '^CAM 201: DOWN, '
-NVR status | grep -q 'NVR v2.4 - DEGRADED'
+NVR status | grep -q 'NVR v2.5 - DEGRADED'
 NVR check
 sleep 2
 p201=$(cat "$T/state/cam201.pid")
-NVR status | grep -q 'NVR v2.4 - HEALTHY'
+NVR status | grep -q 'NVR v2.5 - HEALTHY'
 # One stalled camera must be restarted, others left untouched.
 kill -STOP "$p0"
 f=$(find "$M/cctv/cam101" -name '*.mkv' | head -n 1)
@@ -99,7 +99,7 @@ NVR status | grep -q 'REMOVED FILES: 1'
 # Durable stop: cron check must not resurrect paused cameras.
 NVR stop
 [ -f "$T/state/paused" ]
-NVR status | grep -q 'NVR v2.4 - PAUSED'
+NVR status | grep -q 'NVR v2.5 - PAUSED'
 p_after_stop=$(cat "$T/state/cam101.pid" 2>/dev/null || :)
 [ -z "$p_after_stop" ]
 NVR check
@@ -149,4 +149,4 @@ if grep -q 'test-only-secret' "$M/cctv/.nvr-v2/events.log" 2>/dev/null; then
   echo 'ERROR leaked credential in events.log' >&2; exit 1
 fi
 
-echo 'BusyBox ash NVR v2.4 smoke PASS'
+echo 'BusyBox ash NVR v2.5 smoke PASS'
