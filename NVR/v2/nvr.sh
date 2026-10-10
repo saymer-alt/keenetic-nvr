@@ -822,25 +822,34 @@ cleanup() {
         if [ -n "$goal" ] && [ -n "$free" ] && [ $((free + gain_kb)) -lt "$goal" ]; then
             unsorted=$(mktemp "$STATE/nvr-candidates.XXXXXX") || return 1
             sorted=$(mktemp "$STATE/nvr-sorted.XXXXXX") || { rm -f "$unsorted"; return 1; }
+            scan_ok=1
             for id in $CAMERAS; do
                 dir="$NVR_BASE_DIR/cam$id"
                 for file in "$dir"/cam"$id"_*.mkv; do
                     [ -f "$file" ] && [ ! -L "$file" ] || continue
-                    candidate_mt=$(stat -c %Y "$file" 2>/dev/null) || { skipped=$((skipped + 1)); continue; }
-                    isnum "$candidate_mt" || { skipped=$((skipped + 1)); continue; }
+                    candidate_mt=$(stat -c %Y "$file" 2>/dev/null) || { skipped=$((skipped + 1)); scan_ok=0; continue; }
+                    isnum "$candidate_mt" || { skipped=$((skipped + 1)); scan_ok=0; continue; }
                     [ "$candidate_mt" -le "$NOW" ] || continue
                     if [ "$STORAGE_MODE" = hybrid ] && [ "$candidate_mt" -lt "$cutoff" ]; then continue; fi
-                    case "$file" in *[!A-Za-z0-9_./%-]*) skipped=$((skipped + 1)); continue;; esac
+                    case "$file" in *[!A-Za-z0-9_./%-]*) skipped=$((skipped + 1)); scan_ok=0; continue;; esac
                     printf '%s\t%s\t%s\n' "$candidate_mt" "$id" "$file" >> "$unsorted"
                 done
             done
-            if LC_ALL=C sort -n "$unsorted" > "$sorted"; then
+            if [ "$scan_ok" -eq 0 ]; then
+                # If a candidate can't be safely classified, preserve all
+                # remaining files rather than evict a potentially newer one.
+                :
+            elif LC_ALL=C sort -n "$unsorted" > "$sorted"; then
                 while IFS="$(printf '\t')" read -r candidate_mt id file; do
                     current=$(free_kb) || { failed=$((failed + 1)); break; }
                     [ $((current + gain_kb)) -lt "$goal" ] || break
                     if delete_segment "$file" "$id" "$candidate_mt"; then :; else
                         rc=$?
-                        case "$rc" in 1) :;; 2) skipped=$((skipped + 1));; *) failed=$((failed + 1));; esac
+                        case "$rc" in
+                            1) : ;;
+                            2) skipped=$((skipped + 1)); break ;;
+                            *) failed=$((failed + 1)); break ;;
+                        esac
                     fi
                 done < "$sorted"
             else
