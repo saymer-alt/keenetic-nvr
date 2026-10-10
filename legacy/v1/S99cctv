@@ -1,0 +1,35 @@
+#!/bin/sh
+
+SCRIPT_PATH="/tmp/mnt/YOUR_USB_DRIVE/cctv/record_cctv.sh"
+
+case "$1" in
+    start)
+        if [ -f /tmp/cctv_is_running ]; then
+            echo "CCTV already running."
+            exit 0
+        fi
+        echo "Starting CCTV recording..."
+        sh "$SCRIPT_PATH"
+        ;;
+    stop)
+        echo "Stopping CCTV recording..."
+        rm -f /tmp/cctv_is_running
+        sleep 12
+        
+        for pidfile in /tmp/cctv_cam*.pid; do
+            [ -f "$pidfile" ] || continue
+            PID=$(cat "$pidfile")
+            kill -0 "$PID" 2>/dev/null && kill -9 "$PID" 2>/dev/null
+            rm -f "$pidfile"
+        done
+        ;;
+    restart)
+        $0 stop
+        sleep 2
+        $0 start
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+        ;;
+esac

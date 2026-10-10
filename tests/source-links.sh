@@ -20,4 +20,7 @@ if grep -Fq 'nvr/watchdog-v2-candidate' NVR/v2/README.md; then
     echo "FAIL: README refers to abandoned candidate branch" >&2
     exit 1
 fi
+for file in legacy/v1/README.md legacy/v1/AUDIT.md legacy/v1/record_cctv.sh legacy/v1/cleanup_cctv.sh legacy/v1/S99cctv legacy/v1/S99stream; do
+    [ -s "$file" ] || { echo "FAIL: missing historical $file" >&2; exit 1; }
+done
 echo 'Standalone source links PASS'

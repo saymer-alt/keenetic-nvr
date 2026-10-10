@@ -1,0 +1,84 @@
+#!/bin/sh
+
+RTSP_USER="YOUR_USERNAME"
+RTSP_PASS="YOUR_PASSWORD"
+RTSP_IP="192.168.1.XXX"
+SCRIPT_NAME="stream"
+
+start_stream() {
+    CAM_ID=$1
+    PORT=$2
+    URL="rtsp://$RTSP_USER:$RTSP_PASS@$RTSP_IP:554/Streaming/Channels/$CAM_ID"
+    
+    (
+        while [ -f /tmp/${SCRIPT_NAME}_is_running ]; do
+            if [ -f /tmp/${SCRIPT_NAME}_cam${CAM_ID}.pid ]; then
+                OLD_PID=$(cat /tmp/${SCRIPT_NAME}_cam${CAM_ID}.pid)
+                kill -0 $OLD_PID 2>/dev/null || rm -f /tmp/${SCRIPT_NAME}_cam${CAM_ID}.pid
+            fi
+            
+            /opt/bin/ffmpeg -hide_banner -loglevel error \
+                -fflags +genpts \
+                -rtsp_transport tcp -i "$URL" \
+                -map 0:v:0 -map 0:a? \
+                -c:v copy -c:a aac -b:a 64k \
+                -f mpegts -mpegts_flags +resend_headers -listen 1 \
+                "http://0.0.0.0:$PORT/stream$CAM_ID.ts" > /dev/null 2>&1 &
+            
+            PID=$!
+            echo $PID > /tmp/${SCRIPT_NAME}_cam${CAM_ID}.pid
+            
+            wait $PID 2>/dev/null
+            rm -f /tmp/${SCRIPT_NAME}_cam${CAM_ID}.pid
+            
+            sleep 3
+        done
+    ) > /dev/null 2>&1 &
+}
+
+case "$1" in
+    start)
+        if [ -f /tmp/${SCRIPT_NAME}_is_running ]; then
+            echo "Stream already running."
+            exit 0
+        fi
+        echo "Starting CCTV HTTP streams..."
+        touch /tmp/${SCRIPT_NAME}_is_running
+        
+        # Для аппаратных IPTV-приставок (Selenga и др.) рекомендуется субпоток H.264: 102, 202, 302
+        # Если приставка тянет H.265 — используйте основной поток: 101, 201, 301
+        start_stream "102" "8999"
+        start_stream "202" "9000"
+        start_stream "302" "9001"
+        
+        echo "Done."
+        ;;
+    stop)
+        echo "Stopping CCTV HTTP streams..."
+        rm -f /tmp/${SCRIPT_NAME}_is_running
+        
+        for pidfile in /tmp/${SCRIPT_NAME}_cam*.pid; do
+            [ -f "$pidfile" ] || continue
+            PID=$(cat "$pidfile")
+            kill -TERM "$PID" 2>/dev/null
+        done
+        
+        sleep 3
+        
+        for pidfile in /tmp/${SCRIPT_NAME}_cam*.pid; do
+            [ -f "$pidfile" ] || continue
+            PID=$(cat "$pidfile")
+            kill -0 "$PID" 2>/dev/null && kill -9 "$PID" 2>/dev/null
+            rm -f "$pidfile"
+        done
+        ;;
+    restart)
+        $0 stop
+        sleep 2
+        $0 start
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+        ;;
+esac
