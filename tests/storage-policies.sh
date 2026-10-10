@@ -120,6 +120,26 @@ gone "$expired"; gone "$middle"; kept "$newest"
 nvr status | grep -q '^STORAGE MODE: hybrid$'
 nvr status | grep -q '^RETENTION: 24 hours$'
 
+# An active FFmpeg segment must not be unlinked even when it has an
+# artificially old mtime and disk pressure requires removing older files.
+reset circular 259200
+gcc -Wall -Wextra -O2 -o "$T/ffmpeg" tests/ffmpeg-stub.c
+mkdir -p "$M/cctv/cam101"
+"$T/ffmpeg" -rtsp_transport tcp -i 'rtsp://dummy:test-only-secret@192.0.2.1:554/Streaming/Channels/101' \
+    -c copy "$M/cctv/cam101/cam101_%Y-%m-%d_%H-%M-%S.mkv" >/dev/null 2>&1 &
+active_pid=$!
+sleep 1
+printf '%s\n' "$active_pid" > "$T/state/cam101.pid"
+open_segment=$(ls "$M/cctv/cam101"/cam101_*.mkv | head -n 1)
+[ -n "$open_segment" ] || { echo 'FAIL: missing active mock segment' >&2; exit 1; }
+touch -d '10 days ago' "$open_segment"
+segment 201 old $((4*3600)); second=$file
+segment 301 young $((1*3600)); third=$file
+nvr cleanup
+kept "$open_segment"; gone "$second"; gone "$third"
+kill -TERM "$active_pid" 2>/dev/null || :
+wait "$active_pid" 2>/dev/null || :
+
 # Symlinked camera directory means an unsafe archive path: fail closed.
 reset circular 259200
 mkdir -p "$T/outside"
