@@ -1,6 +1,6 @@
 #!/bin/sh
 # Offline tests for standalone STREAM; no router, camera or external network.
-set -eu
+set -eux
 cd "$(dirname "$0")/.."
 for script in STREAM/v1/stream.sh STREAM/v1/install.sh STREAM/v1/bootstrap.sh STREAM/v1/init.d/S99stream; do
     sh -n "$script"
