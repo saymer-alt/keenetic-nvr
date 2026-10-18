@@ -4,12 +4,16 @@ set -eu
 cd "$(dirname "$0")/.."
 busybox sh -n NVR/v2/telegram-bot.sh
 busybox sh -n NVR/v2/telegram-bot-install.sh
-T=$(mktemp -d)
+mkdir -p /tmp/mnt
+T=$(mktemp -d /tmp/mnt/nvr-telegram-test.XXXXXX)
 trap 'rm -rf "$T"' EXIT
-mkdir -p "$T/state" "$T/bin"
-cat > "$T/conf" <<'EOT'
+mkdir -p "$T/state" "$T/bin" "$T/usb/cctv" "$T/internal/opt"
+printf '/dev/ubi0_0 %s ubifs rw,relatime 0 0\n/dev/sda1 %s ext4 rw,relatime 0 0\n' "$T/internal" "$T/usb" > "$T/mounts"
+cat > "$T/conf" <<EOT
 NVR_NOTIFY_TELEGRAM_TOKEN='123456:test-only'
 NVR_NOTIFY_TELEGRAM_CHAT='42'
+NVR_MOUNT='$T/usb'
+NVR_BASE_DIR='$T/usb/cctv'
 EOT
 cat > "$T/nvr" <<'EOT'
 #!/bin/sh
@@ -58,10 +62,15 @@ EOT
 export NVR_CONFIG="$T/conf"
 export NVR_BIN="$T/nvr"
 export NVR_BOT_STATE_DIR="$T/state"
+export NVR_STORAGE_GUARD="$PWD/NVR/v2/storage-guard.sh"
+export NVR_OPT_PATH="$T/internal/opt"
+export NVR_MOUNTS_FILE="$T/mounts"
 export NVR_BOT_CURL="$T/bin/fakecurl"
 export NVR_TEST_UPDATES="$T/updates"
 export NVR_TEST_SENDS="$T/sends"
 
+# Simulate an acknowledged offset persisted by an older installation.
+printf '101\n' > "$T/state/offset"
 busybox sh NVR/v2/telegram-bot.sh poll
 [ "$(cat "$T/state/offset")" = 106 ]
 [ -f "$T/state/last_poll" ]
@@ -85,4 +94,16 @@ busybox sh NVR/v2/telegram-bot.sh init
 busybox sh NVR/v2/telegram-bot.sh poll
 [ "$(wc -l < "$T/sends")" -eq "$before" ]
 
-echo 'Telegram bot commands PASS (auth, status, disk, offset, init, replay)'
+# A missing USB mount must fail closed without accepting/acknowledging updates.
+printf '/dev/ubi0_0 %s ubifs rw,relatime 0 0\n' "$T/internal" > "$T/mounts"
+prior=$(cat "$T/state/offset")
+if busybox sh NVR/v2/telegram-bot.sh poll >/dev/null 2>&1; then
+  echo 'FAIL: Telegram poll accepted an absent USB archive' >&2; exit 1
+fi
+[ "$(cat "$T/state/offset")" = "$prior" ]
+# Internal-UBIFS default state must be created on the external archive, never /opt.
+printf '/dev/ubi0_0 %s ubifs rw,relatime 0 0\n/dev/sda1 %s ext4 rw,relatime 0 0\n' "$T/internal" "$T/usb" > "$T/mounts"
+unset NVR_BOT_STATE_DIR
+busybox sh NVR/v2/telegram-bot.sh init
+[ -f "$T/usb/cctv/.nvr-v2/telegram/offset" ]
+echo 'Telegram bot commands PASS (auth, status, disk, offset, init, replay, NAND, USB loss)'
