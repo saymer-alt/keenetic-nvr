@@ -1,5 +1,5 @@
 #!/bin/sh
-# Single-command entry point for a NEW Keenetic NVR v2.4 installation.
+# Single-command entry point for a NEW Keenetic NVR v2.5 installation.
 # Supports "curl .../setup.sh | sh" by reading all interaction from /dev/tty.
 set -eu
 umask 077
@@ -20,7 +20,7 @@ case "$MODE" in
     -h|--help|help)
         printf 'Usage: sh setup.sh [install|preflight]\n'
         printf 'Requires Entware, an interactive SSH TTY and a separate USB EXT4 archive disk.\n'
-        printf 'Default: install a fresh NVR v2.4, not upgrade an existing recorder.\n'
+        printf 'Default: install a fresh NVR v2.5, not upgrade an existing recorder.\n'
         exit 0
         ;;
     *) fail 'Use install, preflight or --help' ;;
@@ -42,7 +42,7 @@ if [ "$MODE" = install ] &&     { [ -e /opt/etc/nvr-v2.conf ] || [ -e /opt/etc/n
     fail 'NVR is already installed; use the documented upgrade procedure instead'
 fi
 
-printf 'Keenetic NVR v2.4 — %s\n' "$MODE"
+printf 'Keenetic NVR v2.5 — %s\n' "$MODE"
 printf 'Entware found. The fresh installer will check FFmpeg, Cron, the archive disk and RTSP streams.\n'
 if [ "$MODE" = preflight ]; then
     printf 'Preflight may offer to install missing Entware packages after confirmation.\n'
