@@ -1,5 +1,5 @@
 #!/bin/sh
-# Read-only Telegram command bridge for Keenetic NVR v2.4.
+# Read-only Telegram command bridge for Keenetic NVR v2.4/v2.5.
 # Poll once per minute via Entware cron; never changes camera state.
 set -eu
 umask 077

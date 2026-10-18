@@ -1,5 +1,5 @@
 #!/bin/sh
-# Install the read-only Telegram command poller alongside an existing NVR v2.4.
+# Install the read-only Telegram command poller alongside an existing NVR v2.4/v2.5.
 set -eu
 umask 077
 PATH=/opt/bin:/opt/sbin:/bin:/sbin:/usr/bin:/usr/sbin
