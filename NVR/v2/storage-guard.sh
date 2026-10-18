@@ -53,6 +53,17 @@ nvr_archive_mount() {
     ' "$nvr_mounts"
 }
 
+nvr_physical_device() {
+    # Partition 1 and partition 2 of the same USB disk are NOT independent.
+    case "$1" in
+        /dev/sd[a-z][0-9]*|/dev/hd[a-z][0-9]*|/dev/vd[a-z][0-9]*)
+            printf '%s\n' "$1" | sed 's/[0-9]*$//' ;;
+        /dev/mmcblk[0-9]*p[0-9]*|/dev/nvme[0-9]*n[0-9]*p[0-9]*)
+            printf '%s\n' "$1" | sed 's/p[0-9]*$//' ;;
+        *) printf '%s\n' "$1" ;;
+    esac
+}
+
 nvr_archive_dedicated() {
     nvr_archive_mount "$1" || return 1
     nvr_root=$1
@@ -62,6 +73,7 @@ nvr_archive_dedicated() {
     nvr_opt_source=$(printf '%s\n' "$nvr_opt_entry" | cut -d '|' -f 1)
     nvr_archive_source=$(printf '%s\n' "$nvr_archive_entry" | cut -d '|' -f 1)
     [ "$nvr_opt_source" != "$nvr_archive_source" ] || return 1
+    [ "$(nvr_physical_device "$nvr_opt_source")" != "$(nvr_physical_device "$nvr_archive_source")" ] || return 1
 }
 
 nvr_archive_safe() {
@@ -72,4 +84,13 @@ nvr_archive_safe() {
     nvr_real_root=$(readlink -f "$nvr_root" 2>/dev/null) || return 1
     nvr_real_base=$(readlink -f "$nvr_base" 2>/dev/null) || return 1
     case "$nvr_real_base" in "$nvr_real_root"/*) ;; *) return 1 ;; esac
+    # Reject nested mounts and symlinked archive state/camera folders that
+    # could route high-frequency writes to NAND outside the USB archive.
+    nvr_base_entry=$(nvr_mount_entry "$nvr_base") || return 1
+    nvr_root_entry=$(nvr_mount_entry "$nvr_root") || return 1
+    [ "$nvr_base_entry" = "$nvr_root_entry" ] || return 1
+    [ ! -L "$nvr_base/.nvr-v2" ] || return 1
+    for nvr_camera_dir in "$nvr_base"/cam*; do
+        [ ! -L "$nvr_camera_dir" ] || return 1
+    done
 }
