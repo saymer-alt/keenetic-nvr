@@ -106,4 +106,15 @@ printf '/dev/ubi0_0 %s ubifs rw,relatime 0 0\n/dev/sda1 %s ext4 rw,relatime 0 0\
 unset NVR_BOT_STATE_DIR
 busybox sh NVR/v2/telegram-bot.sh init
 [ -f "$T/usb/cctv/.nvr-v2/telegram/offset" ]
-echo 'Telegram bot commands PASS (auth, status, disk, offset, init, replay, NAND, USB loss)'
+# A symlink placed under external .nvr-v2 may target internal NAND:
+# never follow it, even with a valid EXT4 archive mount.
+mv "$T/usb/cctv/.nvr-v2/telegram" "$T/usb/cctv/.nvr-v2/telegram.saved"
+ln -s "$T/internal" "$T/usb/cctv/.nvr-v2/telegram"
+if busybox sh NVR/v2/telegram-bot.sh poll >/dev/null 2>&1; then
+    echo 'FAIL: followed Telegram state symlink into simulated NAND' >&2; exit 1
+fi
+[ ! -f "$T/internal/offset" ] ||
+    { echo 'FAIL: wrote Telegram offset into simulated NAND' >&2; exit 1; }
+rm "$T/usb/cctv/.nvr-v2/telegram"
+mv "$T/usb/cctv/.nvr-v2/telegram.saved" "$T/usb/cctv/.nvr-v2/telegram"
+echo 'Telegram bot commands PASS (auth, status, disk, offset, init, replay, NAND, USB loss, symlink)'
