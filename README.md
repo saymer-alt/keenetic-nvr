@@ -12,6 +12,8 @@
 - **[NVR/v2](NVR/v2/README.md)** — запись RTSP в MKV, управление архивом, watchdog и Telegram на первом KN-1012. Его мастер — корневой `setup.sh`.
 - **[STREAM/v1](STREAM/v1/README.md)** — отдельный RTSP → HTTP MPEG-TS сервер для Selenga и ЭЛТ-телевизора на втором KN-1012. У него собственный `STREAM/v1/bootstrap.sh`, служба `S99stream` и плейлист M3U. **Не записывает MKV, не трогает диски и cron NVR.**
 
+**Релизный кандидат v2.5.0-rc.1:** [примечания к выпуску](RELEASE-NOTES-v2.5.0-rc.1.md). Наработки уже находятся в `main`; аппаратно проверены TIME/72h и STREAM, но полный релиз `v2.5.0` ожидает CIRCULAR/HYBRID, reboot/USB-loss и чистой установки ([#7](https://github.com/saymer-alt/keenetic-nvr/issues/7), [#10](https://github.com/saymer-alt/keenetic-nvr/issues/10)).
+
 **Фактическое восстановление двух KN-1012 после Mesh-reset подтверждено 18.10.2026:** STREAM → Selenga → Sony ЭЛТ (3/3), NVR v2.5 → MKV на прежнем архивном EXT4 (3/3 HEALTHY), TIME/72h, удаление 276 просроченных MKV, уведомления и Telegram-команды 4/4 PASS. **[Финальный протокол](FIELD-ACCEPTANCE-2026-10-18.md)**; [первичная инвентаризация](FIELD-RESTORE-2026-10-18.md). Автозапуск после reboot ещё не проверен по решению владельца; не запускайте установщик NVR ради телевизионного вещания.
 
 ## Кому это нужно и что получится

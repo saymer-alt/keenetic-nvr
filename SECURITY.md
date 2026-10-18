@@ -4,7 +4,7 @@
 
 ## Supported scope
 
-The documented v2.4 implementation on `main` has been tested on KN-1012 for recording, cron checks and notifications. Reboot/recovery, full 72-hour retention expiry and fresh installation on another device remain partially unverified. The v2.5 additions (storage policies, NAND/UBIFS protection, KAS `S00ubifs` integration, STREAM/v1) have passed offline CI tests only — hardware acceptance is tracked in issue #7. Older revisions are not promised security support.
+The v2.4 baseline was tested on KN-1012 on 2026-10-10. As of 2026-10-18, v2.5 **TIME/72h** has also passed partial real-device acceptance on KN-1012: 3/3 healthy MKV streams, preview and actual cleanup of 276 expired MKV files, active Cron watchdog, and Telegram alerts/read-only commands. The KAS `S00ubifs` runtime tmpfs guard was verified on both KN-1012 routers, and STREAM/v1 delivered actual MPEG-TS video to a Selenga 980 and Sony CRT. This **does not** establish full hardware acceptance of CIRCULAR/HYBRID, reboot recovery, USB-loss, forced camera failures, or a fresh install on a separate test disk; see issue #7 and [field report](FIELD-ACCEPTANCE-2026-10-18.md). Older revisions are not promised security support.
 
 RTSP URL handling, passwords, install/bootstrap scripts, command arguments, temporary files, telemetry/Telegram bot tokens, webhook payloads, scheduled FFmpeg execution, video file access and cleanup. Never submit real camera access details.
 
