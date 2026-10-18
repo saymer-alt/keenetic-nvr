@@ -43,6 +43,12 @@ prerequisites() {
     printf 'Entware storage profile: %s\n' "$profile"
     candidates=$(awk '$2 ~ /^\/tmp\/mnt\// && $1 ~ /^\/dev\// && $3=="ext4" && $4 ~ /(^|,)rw(,|$)/ {print $2}' /proc/mounts)
     [ -n "$candidates" ] || fail 'No mounted EXT4 RW USB archive disk'
+    independent=''
+    for candidate in $candidates; do
+        if nvr_archive_dedicated "$candidate"; then independent=1; break; fi
+    done
+    [ -n "$independent" ] ||
+        fail 'No dedicated external EXT4 archive disk (Entware disk is not eligible)'
     need=$(missing_deps)
     if [ -n "$need" ]; then
         printf 'Missing Entware packages:%s\n' "$need" > /dev/tty
