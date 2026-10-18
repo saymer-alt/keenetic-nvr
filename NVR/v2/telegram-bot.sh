@@ -48,16 +48,23 @@ fetch() {
 valid_response() {
     printf '%s\n' "$1" | jq -e '.ok == true and (.result | type == "array")' >/dev/null 2>&1
 }
+archive_available() {
+    nvr_archive_safe "$NVR_MOUNT" "$NVR_BASE_DIR" ||
+        fail 'Archive was disconnected; refusing Telegram command acknowledgement'
+}
 atomic_offset() {
+    archive_available
     next=$1
     printf '%s\n' "$next" > "$STATE/offset.tmp.$$"
-    mv -f "$STATE/offset.tmp.$$" "$STATE/offset"
+    archive_available
+    mv -f "$STATE/offset.tmp.$" "$STATE/offset"
 }
 offset() {
     x=$(cat "$STATE/offset" 2>/dev/null || :)
     case $x in ''|*[!0-9]*) return 1 ;; *) echo "$x" ;; esac
 }
 lock() {
+    archive_available
     if mkdir "$STATE/.lock" 2>/dev/null; then
         printf '%s\n' "$$" > "$STATE/.lock/pid"
     else
@@ -76,6 +83,7 @@ lock() {
     trap 'rm -f "$STATE/.lock/pid"; rmdir "$STATE/.lock" 2>/dev/null || :' EXIT
 }
 send_reply() {
+    archive_available
     msg=$1
     payload=$(mktemp "$STATE/message.XXXXXX") || return 1
     # jq escapes quotes, Unicode, line breaks and control chars for the JSON body.
@@ -166,6 +174,7 @@ poll() {
         atomic_offset "$((uid+1))"
     done
     # A fresh timestamp is useful for checking cron without exposing secrets.
+    archive_available
     date '+%Y-%m-%d %H:%M:%S' > "$STATE/last_poll"
 }
 case ${1:-} in
