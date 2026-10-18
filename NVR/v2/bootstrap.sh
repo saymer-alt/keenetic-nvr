@@ -17,7 +17,7 @@ fi
 DIR=$(mktemp -d /tmp/nvr-setup.XXXXXX) || exit 1
 trap 'rm -rf "$DIR"' EXIT
 case "$ACTION" in
-    *-fresh) FILES='nvr.sh fresh-install.sh'; RUNNER='fresh-install.sh' ;;
+    *-fresh) FILES='nvr.sh fresh-install.sh storage-guard.sh'; RUNNER='fresh-install.sh' ;;
     preflight-upgrade|upgrade) FILES='nvr.sh upgrade-router.sh'; RUNNER='upgrade-router.sh' ;;
     *) FILES='nvr.sh install-router.sh'; RUNNER='install-router.sh' ;;
 esac
