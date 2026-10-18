@@ -1,0 +1,10 @@
+#!/bin/sh
+# Keenetic STREAM v1 standalone init, not NVR/S99cctv.
+set -eu
+SCRIPT=/opt/etc/keenetic-stream.sh
+[ -r "$SCRIPT" ] || { echo 'STREAM: script missing' >&2; exit 1; }
+case ${1:-} in
+    start|stop|restart|status|check|playlist)
+        exec /bin/sh "$SCRIPT" "$1" ;;
+    *) printf 'Usage: %s {start|stop|restart|status|check|playlist}\n' "$0" >&2; exit 2 ;;
+esac
