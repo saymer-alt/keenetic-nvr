@@ -81,14 +81,18 @@ ffmpeg_owned() {
 }
 stop_orphan() {
     id=$1; port=$2
-    pf=$(ffmpeg_file "$id")
-    p=$(pid_from "$pf" 2>/dev/null || :)
-    if [ -n "$p" ] && ffmpeg_owned "$p" "$id" "$port"; then
-        kill -TERM "$p" 2>/dev/null || :
+    # POSIX sh functions share variables with their callers. Do not overwrite
+    # the caller's 'pf' (worker pidfile): it made status falsely show DOWN.
+    orphan_pf=$(ffmpeg_file "$id")
+    orphan_pid=$(pid_from "$orphan_pf" 2>/dev/null || :)
+    if [ -n "$orphan_pid" ] && ffmpeg_owned "$orphan_pid" "$id" "$port"; then
+        kill -TERM "$orphan_pid" 2>/dev/null || :
         sleep 1
-        if ffmpeg_owned "$p" "$id" "$port"; then kill -KILL "$p" 2>/dev/null || :; fi
+        if ffmpeg_owned "$orphan_pid" "$id" "$port"; then
+            kill -KILL "$orphan_pid" 2>/dev/null || :
+        fi
     fi
-    rm -f "$pf"
+    rm -f "$orphan_pf"
 }
 worker() {
     id=$1; port=$2
