@@ -4,7 +4,7 @@
 
 ## Supported scope
 
-The documented v2.4 implementation on `main` has been tested on KN-1012 for recording, cron checks and notifications. Reboot/recovery, full 72-hour retention expiry and fresh installation on another device remain partially unverified. Older revisions are not promised security support.
+The documented v2.4 implementation on `main` has been tested on KN-1012 for recording, cron checks and notifications. Reboot/recovery, full 72-hour retention expiry and fresh installation on another device remain partially unverified. The v2.5 additions (storage policies, NAND/UBIFS protection, KAS `S00ubifs` integration, STREAM/v1) have passed offline CI tests only — hardware acceptance is tracked in issue #7. Older revisions are not promised security support.
 
 RTSP URL handling, passwords, install/bootstrap scripts, command arguments, temporary files, telemetry/Telegram bot tokens, webhook payloads, scheduled FFmpeg execution, video file access and cleanup. Never submit real camera access details.
 

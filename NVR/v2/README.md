@@ -112,8 +112,9 @@ KAS/stable при внутреннем /opt** в режимах установк
 Пример `nvr status`:
 
 ```text
-NVR v2.4 - HEALTHY
+NVR v2.5 - HEALTHY
 DISK: RW, 20% used, 499.0 GB free
+STORAGE MODE: time
 RETENTION: 72 hours
 SEGMENT: 900 seconds
 LAST CHECK: 2026-10-09 22:05:01 (85s ago)
@@ -125,6 +126,10 @@ CAM 201: HEALTHY, last write 6s ago
 CAM 301: HEALTHY, last write 2s ago
 ALERTS: disabled
 ```
+
+В режимах `circular`/`hybrid` вместо строки `RETENTION: … hours` выводится
+`RETENTION: capacity-based (no minimum)` и добавляется строка
+`FREE RESERVE: <N>% (minimum <M> MB)`.
 
 Состояния камеры: `HEALTHY`, `STARTING` (процесс есть, первого файла ещё нет),
 `STALE` (процесс есть, данные не обновляются), `DOWN` (процесса нет),
@@ -166,7 +171,7 @@ NVR отправляет:
   (см. KNOWN-LIMITATIONS.md).
 
 Настройка: интерактивный установщик спрашивает про уведомления при `install-fresh`
-(токен вводится скрыто). Для уже установленного NVR v2.4 предусмотрен
+(токен вводится скрыто). Для уже установленного NVR v2.4/v2.5 предусмотрен
 **короткий мастер**, без копирования длинного here-document в SSH.
 
 1. В Telegram через `@BotFather` выполнить `/newbot` и получить **API token**
@@ -214,10 +219,13 @@ Telegram запись камер не останавливается. Не пу�
 `telegram-bot.sh` раз в минуту опрашивает Telegram Bot API `getUpdates` через
 HTTPS, выполняет только **read-only** `sh /opt/etc/nvr-v2.sh status`,
 отправляет ответ через `sendMessage` и сохраняет последний `update_id`
-в `/opt/var/lib/nvr-telegram/` (сохраняется после перезагрузки).
+в состоянии бота (сохраняется после перезагрузки): `/opt/var/lib/nvr-telegram/`
+на внешнем EXT4 `/opt`, либо — при внутренней UBIFS — в `.nvr-v2/telegram`
+на архивном EXT4-диске (никогда во внутреннюю NAND; подробности:
+[NAND-WEAR.md](../../NAND-WEAR.md)).
 Токен берётся из уже настроенного `/opt/etc/nvr-v2.conf`, повторно вводить не надо.
 
-### Включение на уже работающем NVR v2.4
+### Включение на уже работающем NVR v2.4/v2.5
 
 Зависимость для безопасного разбора Telegram JSON:
 

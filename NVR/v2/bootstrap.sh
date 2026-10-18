@@ -1,5 +1,5 @@
 #!/bin/sh
-# Download NVR v2.4 from the owner's GitHub repository before installation.
+# Download NVR v2.5 from the owner's GitHub repository before installation.
 set -eu
 umask 077
 ACTION=${1:-}
