@@ -72,7 +72,7 @@ printf '/dev/sda1 %s ntfs rw 0 0\n' "$KNVR_FLASH_ROOT" > "$KNVR_FLASH_MOUNTS"
 if knvr_flash_preflight >/dev/null 2>&1; then echo 'FAIL NTFS accepted' >&2; exit 1; fi
 printf 'tmpfs %s tmpfs rw 0 0\n' "$KNVR_FLASH_ROOT" > "$KNVR_FLASH_MOUNTS"
 if knvr_flash_preflight >/dev/null 2>&1; then echo 'FAIL volatile /opt accepted' >&2; exit 1; fi
-printf '/dev/sda1 %s ext4 rw 0 0\n' "$T" > "$KNVR_FLASH_MOUNTS"
+printf '/dev/sda1 /unrelated-mount ext4 rw 0 0\n' > "$KNVR_FLASH_MOUNTS"
 if knvr_flash_preflight >/dev/null 2>&1; then echo 'FAIL unknown /opt accepted' >&2; exit 1; fi
 grep -Fq 'knvr_flash_ensure' NVR/v2/fresh-install.sh
 grep -Fq 'knvr_flash_ensure' STREAM/v1/install.sh
