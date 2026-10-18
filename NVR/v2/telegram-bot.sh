@@ -36,7 +36,35 @@ else
     STATE=/opt/var/lib/nvr-telegram
 fi
 case "$STATE" in /*) ;; *) fail 'Telegram state path must be absolute' ;; esac
+# A stale telegram-state symlink can silently redirect hourly/minute writes
+# back to internal UBIFS even if the archive itself remains mounted.
+[ ! -L "$STATE" ] || fail 'Symlinked Telegram state is unsafe'
+if [ "$profile" = internal-ubifs ]; then
+    # First create only the verified archive's own metadata directory.
+    mkdir -p "$NVR_BASE_DIR/.nvr-v2" || fail 'Archive metadata is inaccessible'
+    nvr_archive_safe "$NVR_MOUNT" "$NVR_BASE_DIR" ||
+        fail 'Archive disappeared while preparing Telegram state'
+    state_parent=$(readlink -f "$(dirname "$STATE")" 2>/dev/null) ||
+        fail 'Cannot resolve Telegram state parent'
+    # For real devices, explicit overrides MUST remain on the EXT4 archive.
+    # Offline fixture mountfiles intentionally permit an alternate test dir.
+    if [ -z "${NVR_MOUNTS_FILE:-}" ]; then
+        real_meta=$(readlink -f "$NVR_BASE_DIR/.nvr-v2") ||
+            fail 'Cannot resolve EXT4 metadata'
+        case "$state_parent" in
+            "$real_meta"|"$real_meta"/*) ;;
+            *) fail 'Telegram state override on NAND/other disk is forbidden' ;;
+        esac
+    fi
+fi
 mkdir -p "$STATE" || fail 'Could not create Telegram state'
+# Detect mount changes and submounts before creating state files.
+if [ "$profile" = internal-ubifs ] && [ -z "${NVR_MOUNTS_FILE:-}" ]; then
+    archive_entry=$(nvr_mount_entry "$NVR_MOUNT") || fail 'Archive mount missing'
+    state_entry=$(nvr_mount_entry "$STATE") || fail 'Telegram state mount missing'
+    [ "$archive_entry" = "$state_entry" ] ||
+        fail 'Telegram state must use the archive EXT4 filesystem'
+fi
 chmod 700 "$STATE" || fail 'Could not protect Telegram state'
 
 fetch() {
