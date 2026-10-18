@@ -57,7 +57,7 @@ atomic_offset() {
     next=$1
     printf '%s\n' "$next" > "$STATE/offset.tmp.$$"
     archive_available
-    mv -f "$STATE/offset.tmp.$" "$STATE/offset"
+    mv -f "$STATE/offset.tmp.$$" "$STATE/offset"
 }
 offset() {
     x=$(cat "$STATE/offset" 2>/dev/null || :)
