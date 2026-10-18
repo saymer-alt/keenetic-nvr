@@ -136,6 +136,16 @@ if NVR check; then
   echo 'ERROR health check succeeded with read-only mount' >&2; exit 1
 fi
 
+# Non-EXT4 mounted volumes are also rejected, including during cleanup.
+printf '/dev/mock %s xfs rw,relatime 0 0\n' "$M" > "$T/mounts"
+printf 'old on wrong fs\n' > "$M/cctv/cam201/cam201_wrongfs.mkv"
+touch -d '80 hours ago' "$M/cctv/cam201/cam201_wrongfs.mkv"
+if NVR cleanup; then
+  echo 'ERROR cleanup succeeded on non-EXT4 mount' >&2; exit 1
+fi
+[ -f "$M/cctv/cam201/cam201_wrongfs.mkv" ]
+printf '/dev/mock %s ext4 rw,relatime 0 0\n' "$M" > "$T/mounts"
+
 # Event log redaction: planted rtsp credentials must never surface via logs.
 printf '/dev/mock %s ext4 rw,relatime 0 0\n' "$M" > "$T/mounts"
 printf 'manual line rtsp://operator:leaked-pass@10.0.0.9:554/Streaming/Channels/101\n' >> "$T/state/events.log"
