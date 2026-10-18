@@ -12,6 +12,10 @@ CONFIG=${NVR_CONFIG:-/opt/etc/nvr-v2.conf}
 . "$CONFIG"
 : "${NVR_MOUNT:?}" "${NVR_BASE_DIR:?}" "${RTSP_USER:?}" "${RTSP_PASS:?}" "${RTSP_IP:?}"
 STATE=${NVR_STATE_DIR:-/tmp/nvr-v2}
+# Temporary sort lists, PID/lock/check state and FFmpeg scratch go to RAM.
+# Do not permit an environment override to redirect frequent writes to NAND.
+TMPDIR=/tmp
+export TMPDIR
 PDATA="$NVR_BASE_DIR/.nvr-v2"
 FFMPEG=${NVR_FFMPEG:-/opt/bin/ffmpeg}
 CAMERAS=${NVR_CAMERAS:-'101 201 301'}
@@ -73,7 +77,10 @@ mounted_rw() {
         $2==d { found=1; ok=($1 ~ /^\/dev\// && $3=="ext4" && $4 ~ /(^|,)rw(,|$)/) }
         END { exit !(found && ok) }
     ' "${NVR_MOUNTS_FILE:-/proc/mounts}" || return 1
-    if [ -z "${NVR_MOUNTS_FILE:-}" ] && [ -r /opt/etc/nvr-storage-guard.sh ]; then
+    if [ -z "${NVR_MOUNTS_FILE:-}" ]; then
+        # The guard is mandatory on the router. Without it, a valid-looking
+        # mount path alone is not sufficient protection against NAND writes.
+        [ -r /opt/etc/nvr-storage-guard.sh ] || return 1
         . /opt/etc/nvr-storage-guard.sh
         nvr_archive_safe "$NVR_MOUNT" "$NVR_BASE_DIR" || return 1
     fi
@@ -890,7 +897,37 @@ cleanup() {
     [ "$result" = OK ]
 }
 
-mkdir -p "$STATE" || exit 2
+# This command runs on every cron tick; never trust a stale symlink or a
+# custom NVR_STATE_DIR pointing at NAND. Validate before creating state files.
+nvr_ram_state() {
+    case "$STATE" in /tmp/*) ;; *) echo 'NVR: runtime state must stay under /tmp' >&2; return 1 ;; esac
+    [ ! -L "$STATE" ] || { echo 'NVR: symlinked runtime state refused' >&2; return 1; }
+    parent=$(dirname "$STATE")
+    real_parent=$(readlink -f "$parent" 2>/dev/null) || return 1
+    case "$real_parent" in /tmp|/tmp/*) ;; *) echo 'NVR: state directory escapes /tmp' >&2; return 1 ;; esac
+    # NVR_MOUNTS_FILE is an offline test seam. On actual Keenetic enforce
+    # that /tmp is RAM-backed (typically tmpfs).
+    if [ -z "${NVR_MOUNTS_FILE:-}" ]; then
+        real_tmp=$(readlink -f /tmp 2>/dev/null) || return 1
+        awk -v p="$real_tmp" '
+            $2 ~ /^\// {
+                m=$2
+                if (p==m || m=="/" || index(p,m "/")==1) {
+                    if (length(m)>=best) {best=length(m); fs=$3}
+                }
+            }
+            END {exit !(best>0 && fs=="tmpfs")}
+        ' /proc/mounts || {
+            echo 'NVR: /tmp is not confirmed tmpfs; refusing high-frequency writes' >&2
+            return 1
+        }
+    fi
+    mkdir -p "$STATE" || return 1
+    real_state=$(readlink -f "$STATE" 2>/dev/null) || return 1
+    case "$real_state" in /tmp/*) ;; *) echo 'NVR: unsafe resolved state' >&2; return 1 ;; esac
+    return 0
+}
+nvr_ram_state || exit 2
 # NVR_LIB_ONLY=1 loads functions for offline tests without executing anything.
 if [ "${NVR_LIB_ONLY:-0}" != 1 ]; then
 case ${1:-status} in
