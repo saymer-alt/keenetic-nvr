@@ -3,7 +3,9 @@
 set -eu
 umask 077
 PATH=/opt/bin:/opt/sbin:/bin:/sbin:/usr/bin:/usr/sbin
-RAW=${STREAM_RAW_BASE:-https://raw.githubusercontent.com/saymer-alt/keenetic-nvr/main/STREAM/v1}
+ROOT_RAW=${STREAM_PROJECT_RAW_BASE:-https://raw.githubusercontent.com/saymer-alt/keenetic-nvr/main}
+RAW=${STREAM_RAW_BASE:-$ROOT_RAW/STREAM/v1}
+FLASH_HELPER_URL=${STREAM_FLASH_HELPER_URL:-$ROOT_RAW/tools/entware-flash-guard.sh}
 MODE=${1:-preflight}
 case "$MODE" in preflight|install) ;; *) echo 'Usage: bootstrap.sh {preflight|install}' >&2; exit 2 ;; esac
 case "$RAW" in https://*) ;; *) echo 'STREAM_RAW_BASE must be HTTPS' >&2; exit 1 ;; esac
@@ -13,6 +15,9 @@ trap 'rm -rf "$TMP"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
 mkdir -p "$TMP/init.d"
+curl -fSsL --connect-timeout 10 --max-time 30 "$FLASH_HELPER_URL" -o "$TMP/entware-flash-guard.sh" ||
+    { echo 'KAS flash helper download failed' >&2; exit 1; }
+[ -s "$TMP/entware-flash-guard.sh" ] && sh -n "$TMP/entware-flash-guard.sh" || exit 1
 for path in install.sh stream.sh stream.conf.example init.d/S99stream; do
     curl -fSsL --connect-timeout 10 --max-time 30 "$RAW/$path" -o "$TMP/$path" ||
         { echo "Download failed: $path" >&2; exit 1; }
