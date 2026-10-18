@@ -1,5 +1,5 @@
 #!/bin/sh
-# Configure Telegram on existing Keenetic NVR v2.4 without exposing tokens.
+# Configure Telegram on existing Keenetic NVR v2.4/v2.5 without exposing tokens.
 set -eu
 umask 077
 PATH=/opt/bin:/opt/sbin:/bin:/sbin:/usr/bin:/usr/sbin
@@ -16,8 +16,9 @@ trap 'exit 130' INT
 trap 'exit 143' TERM HUP
 
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
-[ -f "$CONF" ] || fail 'NVR config not found; install NVR v2.4 first'
-grep -q 'NVR v2.4' /opt/etc/nvr-v2.sh || fail 'NVR v2.4 is not installed'
+[ -f "$CONF" ] || fail 'NVR config not found; install NVR v2.4/v2.5 first'
+# Same acceptance as telegram-bot-install.sh: both released recorder lines.
+grep -Eq 'NVR v2\.(4|5)' /opt/etc/nvr-v2.sh || fail 'NVR v2.4/v2.5 is not installed'
 command -v curl >/dev/null 2>&1 || fail 'curl not installed'
 SAVED_TTY=$(stty -g </dev/tty) || fail 'This installer needs an interactive SSH TTY'
 
