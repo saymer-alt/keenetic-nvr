@@ -1,6 +1,6 @@
 #!/bin/sh
 # Offline tests for standalone STREAM; no router, camera or external network.
-set -eux
+set -eu
 cd "$(dirname "$0")/.."
 for script in STREAM/v1/stream.sh STREAM/v1/install.sh STREAM/v1/bootstrap.sh STREAM/v1/init.d/S99stream; do
     sh -n "$script"
@@ -45,16 +45,6 @@ printf '%s\n' "$playlist" | grep -q 'http://192.0.2.3:8083'
 stream status | grep -q 'Camera 101: DOWN'
 stream start > "$T/start.log"
 sleep 2
-echo '=== STREAM DEBUG ==='
-cat "$T/start.log"
-stream status
-ls -l "$T/state"
-for pf in "$T/state"/cam*.worker.pid; do
-    [ -f "$pf" ] || continue
-    p=$(cat "$pf")
-    echo "worker pid: $p"
-    if [ -r "/proc/$p/cmdline" ]; then tr '\\000' ' ' < "/proc/$p/cmdline"; echo; fi
-done
 stream status | grep -q 'Camera 101: WORKER UP'
 stream status | grep -q 'Camera 202: WORKER UP'
 stream status | grep -q 'Camera 302: WORKER UP'
