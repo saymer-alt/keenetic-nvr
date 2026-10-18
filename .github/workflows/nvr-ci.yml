@@ -22,7 +22,7 @@ jobs:
 
       - name: Shell syntax (POSIX sh + BusyBox ash)
         run: |
-          for f in setup.sh NVR/v2/nvr.sh NVR/v2/install-router.sh NVR/v2/fresh-install.sh NVR/v2/upgrade-router.sh NVR/v2/bootstrap.sh NVR/v2/telegram-setup.sh NVR/v2/telegram-bot.sh NVR/v2/telegram-bot-install.sh tests/telegram-bot-commands.sh tests/storage-policies.sh tests/setup-entrypoint.sh tests/source-links.sh tests/smoke.sh tests/retention-cases.sh tests/notify-logic.sh tests/secrets-scan.sh tests/fresh-config-smoke.sh; do
+          for f in setup.sh NVR/v2/nvr.sh NVR/v2/install-router.sh NVR/v2/fresh-install.sh NVR/v2/upgrade-router.sh NVR/v2/bootstrap.sh NVR/v2/telegram-setup.sh NVR/v2/telegram-bot.sh NVR/v2/telegram-bot-install.sh NVR/v2/storage-guard.sh tests/nand-storage-guard.sh tests/telegram-bot-commands.sh tests/storage-policies.sh tests/setup-entrypoint.sh tests/source-links.sh tests/smoke.sh tests/retention-cases.sh tests/notify-logic.sh tests/secrets-scan.sh tests/fresh-config-smoke.sh; do
             sh -n "$f"
             busybox sh -n "$f"
           done
@@ -44,6 +44,9 @@ jobs:
 
       - name: Credential quoting helpers
         run: sh tests/fresh-config-smoke.sh
+
+      - name: NAND / EXT4 storage guard matrix
+        run: sh tests/nand-storage-guard.sh
 
       - name: Telegram commands, authorization and replay
         run: sh tests/telegram-bot-commands.sh

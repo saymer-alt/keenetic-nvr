@@ -6,7 +6,8 @@ umask 077
 PATH=/opt/bin:/opt/sbin:/bin:/sbin:/usr/bin:/usr/sbin
 CONF=${NVR_CONFIG:-/opt/etc/nvr-v2.conf}
 NVR=${NVR_BIN:-/opt/etc/nvr-v2.sh}
-STATE=${NVR_BOT_STATE_DIR:-/opt/var/lib/nvr-telegram}
+STATE_OVERRIDE=${NVR_BOT_STATE_DIR:-}
+GUARD=${NVR_STORAGE_GUARD:-/opt/etc/nvr-storage-guard.sh}
 CURL=${NVR_BOT_CURL:-curl}
 
 fail() { printf 'NVR Telegram: %s\n' "$*" >&2; exit 1; }
@@ -20,8 +21,23 @@ CHAT=${NVR_NOTIFY_TELEGRAM_CHAT:-}
 [ -n "$TOKEN" ] && [ -n "$CHAT" ] || fail 'Configure Telegram notifications first'
 case $CHAT in ''|*[!0-9]*) fail 'Read-only bot supports a private numeric chat ID only' ;; esac
 case $TOKEN in *:*) : ;; *) fail 'Malformed Telegram token' ;; esac
-mkdir -p "$STATE"
-chmod 700 "$STATE"
+[ -r "$GUARD" ] || fail 'Storage guard missing: install the updated Telegram bot'
+. "$GUARD"
+profile=$(nvr_opt_profile) || fail 'Unknown /opt filesystem; Telegram poll disabled'
+# Before ANY mkdir or Bot API polling, verify a real, dedicated EXT4 RW
+# archive. A missing USB must never redirect writes into internal NAND.
+nvr_archive_safe "$NVR_MOUNT" "$NVR_BASE_DIR" ||
+    fail 'Archive is unmounted, not EXT4 RW or is the /opt partition'
+if [ -n "$STATE_OVERRIDE" ]; then
+    STATE=$STATE_OVERRIDE
+elif [ "$profile" = internal-ubifs ]; then
+    STATE="$NVR_BASE_DIR/.nvr-v2/telegram"
+else
+    STATE=/opt/var/lib/nvr-telegram
+fi
+case "$STATE" in /*) ;; *) fail 'Telegram state path must be absolute' ;; esac
+mkdir -p "$STATE" || fail 'Could not create Telegram state'
+chmod 700 "$STATE" || fail 'Could not protect Telegram state'
 
 fetch() {
     # Bot token enters curl via its stdin config, never /proc/cmdline.
@@ -32,24 +48,33 @@ fetch() {
 valid_response() {
     printf '%s\n' "$1" | jq -e '.ok == true and (.result | type == "array")' >/dev/null 2>&1
 }
+archive_available() {
+    nvr_archive_safe "$NVR_MOUNT" "$NVR_BASE_DIR" ||
+        fail 'Archive was disconnected; refusing Telegram command acknowledgement'
+}
 atomic_offset() {
+    archive_available
     next=$1
     printf '%s\n' "$next" > "$STATE/offset.tmp.$$"
+    archive_available
     mv -f "$STATE/offset.tmp.$$" "$STATE/offset"
 }
 offset() {
     x=$(cat "$STATE/offset" 2>/dev/null || :)
-    case $x in ''|*[!0-9]*) echo 0 ;; *) echo "$x" ;; esac
+    case $x in ''|*[!0-9]*) return 1 ;; *) echo "$x" ;; esac
 }
 lock() {
+    archive_available
     if mkdir "$STATE/.lock" 2>/dev/null; then
         printf '%s\n' "$$" > "$STATE/.lock/pid"
     else
         old=$(cat "$STATE/.lock/pid" 2>/dev/null || :)
         case $old in ''|*[!0-9]*) old=0 ;; esac
-        if [ "$old" -gt 1 ] && kill -0 "$old" 2>/dev/null; then
-            exit 0
-        fi
+        if [ "$old" -gt 1 ] && kill -0 "$old" 2>/dev/null; then exit 0; fi
+        # Do not steal a newly created lock before its owner writes the PID.
+        stamp=$(stat -c %Y "$STATE/.lock" 2>/dev/null || :)
+        case $stamp in ''|*[!0-9]*) exit 0 ;; esac
+        [ $(( $(date +%s) - stamp )) -gt 120 ] || exit 0
         rm -f "$STATE/.lock/pid"
         rmdir "$STATE/.lock" 2>/dev/null || exit 0
         mkdir "$STATE/.lock" 2>/dev/null || exit 0
@@ -58,6 +83,7 @@ lock() {
     trap 'rm -f "$STATE/.lock/pid"; rmdir "$STATE/.lock" 2>/dev/null || :' EXIT
 }
 send_reply() {
+    archive_available
     msg=$1
     payload=$(mktemp "$STATE/message.XXXXXX") || return 1
     # jq escapes quotes, Unicode, line breaks and control chars for the JSON body.
@@ -118,13 +144,21 @@ init() {
         fail 'getUpdates failed (network/token/webhook); no setup change'
     valid_response "$result" || fail 'getUpdates rejected (possibly a webhook is active)'
     latest=$(printf '%s\n' "$result" | jq -r '[.result[].update_id] | max // -1')
-    if [ "$latest" -ge 0 ]; then atomic_offset "$((latest+1))"
-    else atomic_offset 0; fi
+    if [ "$latest" -ge 0 ]; then next=$((latest+1)); else next=0; fi
+    # Preserve any already acknowledged update ID during migrations/restarts.
+    current=$(offset 2>/dev/null || :)
+    case $current in ''|*[!0-9]*) : ;; *) [ "$current" -le "$next" ] || next=$current ;; esac
+    if [ "$profile" = internal-ubifs ] && [ -z "$STATE_OVERRIDE" ]; then
+        # Read-only legacy import: the old minute poller used internal NAND.
+        old=$(cat /opt/var/lib/nvr-telegram/offset 2>/dev/null || :)
+        case $old in ''|*[!0-9]*) : ;; *) [ "$old" -le "$next" ] || next=$old ;; esac
+    fi
+    atomic_offset "$next"
     printf 'NVR Telegram commands initialised, offset=%s.\n' "$(offset)"
 }
 poll() {
     lock
-    start=$(offset)
+    start=$(offset) || fail 'Missing or invalid offset; run telegram-bot.sh init first'
     result=$(fetch "getUpdates?offset=$start&limit=30&timeout=0") ||
         fail 'getUpdates failed; will retry next minute'
     valid_response "$result" || fail 'getUpdates rejected; check webhook, token or network'
@@ -134,11 +168,13 @@ poll() {
     while IFS= read -r event; do
         uid=$(printf '%s\n' "$event" | jq -r '.update_id | numbers')
         case $uid in ''|*[!0-9]*) continue ;; esac
-        [ "$uid" -ge "$(offset)" ] || continue
+        current=$(offset) || exit 1
+        [ "$uid" -ge "$current" ] || continue
         handle_update "$event" || exit 1
         atomic_offset "$((uid+1))"
     done
     # A fresh timestamp is useful for checking cron without exposing secrets.
+    archive_available
     date '+%Y-%m-%d %H:%M:%S' > "$STATE/last_poll"
 }
 case ${1:-} in
@@ -146,7 +182,8 @@ case ${1:-} in
     poll) poll ;;
     status)
         printf 'Telegram poller: %s\n' "$(test -f "$STATE/last_poll" && cat "$STATE/last_poll" || echo never)"
-        printf 'Next update offset: %s\n' "$(offset)"
+        printf 'Storage profile: %s\n' "$profile"
+        printf 'Next update offset: %s\n' "$(offset 2>/dev/null || echo uninitialised)"
         ;;
     *) printf 'Usage: telegram-bot.sh {init|poll|status}\n' >&2; exit 2 ;;
 esac

@@ -5,6 +5,8 @@ umask 077
 PATH=/opt/bin:/opt/sbin:/bin:/sbin:/usr/bin:/usr/sbin
 HERE=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
 SOURCE="$HERE/nvr.sh"
+GUARD="$HERE/storage-guard.sh"
+INSTALLED_GUARD=/opt/etc/nvr-storage-guard.sh
 RECORDER=/opt/etc/nvr-v2.sh
 CONFIG=/opt/etc/nvr-v2.conf
 CRON=/opt/etc/init.d/S10cron
@@ -35,6 +37,18 @@ missing_deps() {
 }
 prerequisites() {
     [ -r "$SOURCE" ] && sh -n "$SOURCE" || fail 'Missing or invalid nvr.sh'
+    [ -r "$GUARD" ] && sh -n "$GUARD" || fail 'Missing or invalid storage-guard.sh'
+    . "$GUARD"
+    profile=$(nvr_opt_profile) || fail 'Unknown /opt filesystem; refusing NAND-unsafe installation'
+    printf 'Entware storage profile: %s\n' "$profile"
+    candidates=$(awk '$2 ~ /^\/tmp\/mnt\// && $1 ~ /^\/dev\// && $3=="ext4" && $4 ~ /(^|,)rw(,|$)/ {print $2}' /proc/mounts)
+    [ -n "$candidates" ] || fail 'No mounted EXT4 RW USB archive disk'
+    independent=''
+    for candidate in $candidates; do
+        if nvr_archive_dedicated "$candidate"; then independent=1; break; fi
+    done
+    [ -n "$independent" ] ||
+        fail 'No dedicated external EXT4 archive disk (Entware disk is not eligible)'
     need=$(missing_deps)
     if [ -n "$need" ]; then
         printf 'Missing Entware packages:%s\n' "$need" > /dev/tty
@@ -81,7 +95,7 @@ ask_secret() {
     fi
 }
 configured_mount() {
-    awk -v d="$1" '$2==d && $4 ~ /(^|,)rw(,|$)/ {ok=1} END{exit !ok}' /proc/mounts
+    nvr_archive_mount "$1"
 }
 # Characters that must survive RTSP userinfo only when percent-encoded; the
 # installer verifies live which variant the camera accepts.
@@ -92,7 +106,7 @@ has_unsafe_url_chars() {
 pick_mount() {
     printf '\nExternal USB mounts that are mounted read-write:\n' > /dev/tty
     i=1; list=''
-    for m in $(awk '$2 ~ /^\/tmp\/mnt\// && $4 ~ /(^|,)rw(,|$)/ {print $2}' /proc/mounts); do
+    for m in $(awk '$2 ~ /^\/tmp\/mnt\// && $1 ~ /^\/dev\// && $3=="ext4" && $4 ~ /(^|,)rw(,|$)/ {print $2}' /proc/mounts); do
         printf '  %d) %s\n' "$i" "$m" > /dev/tty
         list="$list $m"
         i=$((i+1))
@@ -113,7 +127,7 @@ pick_mount() {
     esac
     case "$mount_path" in /tmp/mnt/*) ;; *) fail 'Only external /tmp/mnt/ paths are supported';; esac
     case "$mount_path" in *' '*|*'..'*) fail 'Mount path contains unsupported characters';; esac
-    configured_mount "$mount_path" || fail 'USB disk is not mounted read-write'
+    nvr_archive_dedicated "$mount_path" || fail 'EXT4 RW archive missing or shares physical partition with Entware'
     # The Entware system disk must not hold the video archive.
     opt_real=$(readlink -f /opt 2>/dev/null || :)
     case "$opt_real" in
@@ -203,6 +217,11 @@ configure() {
         [ "$answer" = YES ] || fail 'No changes to existing config'
     fi
     pick_mount
+    # Do not reuse an archive left by a Mesh reset in the *fresh* installer.
+    if [ -d "$mount_path/cctv" ] &&
+       [ -n "$(find "$mount_path/cctv" -type f -name '*.mkv' -print -quit 2>/dev/null)" ]; then
+        fail 'Existing MKV archive found. Use recovery procedure (#15), not fresh install.'
+    fi
     ask 'RTSP IP/hostname (one recorder/source): '
     host=$answer
     case "$host" in ''|*[!a-zA-Z0-9.-]*) fail 'Expected IPv4 address or DNS hostname without URL/port';; esac
@@ -254,7 +273,7 @@ check_config() {
     [ -r "$CONFIG" ] && [ -f "$RECORDER" ] || fail 'Local config or recorder missing'
     sh -n "$CONFIG" || fail 'Invalid local config'
     . "$CONFIG"
-    configured_mount "$NVR_MOUNT" || fail 'Configured disk not mounted read-write'
+    nvr_archive_safe "$NVR_MOUNT" "$NVR_BASE_DIR" || fail 'Archive must be a dedicated mounted EXT4 RW disk'
 }
 verify_video() {
     count=0
@@ -320,6 +339,8 @@ install_fresh() {
     prerequisites
     [ -e "$RECORDER" ] && [ ! -e "$CONFIG" ] && fail 'Recorder exists without config; inspect manually'
     if [ ! -e "$CONFIG" ]; then configure; fi
+    cp "$GUARD" "$INSTALLED_GUARD"
+    chmod 700 "$INSTALLED_GUARD"
     cp "$SOURCE" "$RECORDER"
     chmod 700 "$RECORDER"
     check_config

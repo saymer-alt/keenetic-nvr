@@ -67,7 +67,17 @@ fi
 case $WEBHOOK in ''|https://*) : ;; *) echo 'NVR: NVR_NOTIFY_WEBHOOK_URL must use HTTPS' >&2; exit 2;; esac
 
 mounted_rw() {
-    awk -v d="$NVR_MOUNT" '$2==d && $4 ~ /(^|,)rw(,|$)/ {ok=1} END {exit !ok}' "${NVR_MOUNTS_FILE:-/proc/mounts}"
+    # An old directory is not a mounted archive. For real installations,
+    # the separately deployed guard also rejects a shared /opt partition.
+    awk -v d="$NVR_MOUNT" '
+        $2==d { found=1; ok=($1 ~ /^\/dev\// && $3=="ext4" && $4 ~ /(^|,)rw(,|$)/) }
+        END { exit !(found && ok) }
+    ' "${NVR_MOUNTS_FILE:-/proc/mounts}" || return 1
+    if [ -z "${NVR_MOUNTS_FILE:-}" ] && [ -r /opt/etc/nvr-storage-guard.sh ]; then
+        . /opt/etc/nvr-storage-guard.sh
+        nvr_archive_safe "$NVR_MOUNT" "$NVR_BASE_DIR" || return 1
+    fi
+    return 0
 }
 disk_ok() {
     if ! mounted_rw || [ ! -d "$NVR_BASE_DIR" ]; then
