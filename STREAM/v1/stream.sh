@@ -8,11 +8,29 @@ export PATH
 SELF=$(readlink -f "$0" 2>/dev/null) || SELF=$0
 CONF=${STREAM_CONFIG:-/opt/etc/keenetic-stream.conf}
 STATE=${STREAM_STATE_DIR:-/tmp/keenetic-stream}
+TMPDIR=/tmp
+export TMPDIR
 fail() { printf 'STREAM: %s\n' "$*" >&2; exit 1; }
 number() { case "$1" in ''|*[!0-9]*) return 1;; esac; }
 state_dir() {
     case "$STATE" in /tmp/*) ;; *) fail 'State must be under /tmp (RAM)' ;; esac
     [ ! -L "$STATE" ] || fail 'Refusing symlinked state directory'
+    parent=$(readlink -f "$(dirname "$STATE")" 2>/dev/null) ||
+        fail 'Cannot resolve parent of runtime state'
+    case "$parent" in /tmp|/tmp/*) ;; *) fail 'State parent escapes /tmp' ;; esac
+    # A symlink or bind-mounted /tmp on UBIFS is not RAM. The deepest
+    # matching mountpoint must be tmpfs on actual KeeneticOS.
+    tmp_real=$(readlink -f /tmp 2>/dev/null) || fail 'Cannot resolve /tmp'
+    mounts=${STREAM_MOUNTS_FILE:-/proc/mounts}
+    awk -v p="$tmp_real" '
+        $2 ~ /^\// {
+            m=$2
+            if (p==m || m=="/" || index(p,m "/")==1) {
+                if (length(m)>=best) {best=length(m); fs=$3}
+            }
+        }
+        END {exit !(best>0 && fs=="tmpfs")}
+    ' "$mounts" || fail '/tmp is not confirmed tmpfs; refusing NAND writes'
     mkdir -p "$STATE" || fail 'Cannot create state directory'
     actual=$(readlink -f "$STATE" 2>/dev/null) || fail 'Cannot resolve state'
     case "$actual" in /tmp/*) ;; *) fail 'State escapes /tmp' ;; esac
