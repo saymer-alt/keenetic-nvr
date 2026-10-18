@@ -57,6 +57,27 @@ printf '/dev/ubi0_0 %s ubifs rw 0 0\n/dev/sdc2 %s ext4 rw 0 0\n/dev/sda1 %s ext4
 nvr_archive_safe "$T/usb" "$T/usb/cctv" ||
     { echo 'FAIL independently mounted /opt and archive' >&2; exit 1; }
 
+# Same USB disk, different partitions must still be rejected.
+printf '/dev/sda2 %s ext4 rw 0 0\n/dev/sda1 %s ext4 rw 0 0\n' \
+    "$T/external" "$T/usb" > "$NVR_MOUNTS_FILE"
+if nvr_archive_safe "$T/usb" "$T/usb/cctv"; then
+    echo 'FAIL same physical disk accepted' >&2; exit 1
+fi
+
+# Symlinked state must never land high-frequency writes on /opt.
+write_mounts
+NVR_OPT_PATH="$T/internal/opt"
+ln -s "$T/internal" "$T/usb/cctv/.nvr-v2"
+if nvr_archive_safe "$T/usb" "$T/usb/cctv"; then
+    echo 'FAIL symlinked archive state accepted' >&2; exit 1
+fi
+rm "$T/usb/cctv/.nvr-v2"
+ln -s "$T/internal" "$T/usb/cctv/cam101"
+if nvr_archive_safe "$T/usb" "$T/usb/cctv"; then
+    echo 'FAIL symlinked camera directory accepted' >&2; exit 1
+fi
+rm "$T/usb/cctv/cam101"
+
 NVR_OPT_PATH="$T/unknown"
 printf '/dev/loop0 %s squashfs ro 0 0\n/dev/sda1 %s ext4 rw 0 0\n' \
     "$T/unknown" "$T/usb" > "$NVR_MOUNTS_FILE"
