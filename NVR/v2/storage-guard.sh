@@ -53,18 +53,23 @@ nvr_archive_mount() {
     ' "$nvr_mounts"
 }
 
-nvr_archive_safe() {
+nvr_archive_dedicated() {
     nvr_archive_mount "$1" || return 1
     nvr_root=$1
-    nvr_base=$2
-    [ -d "$nvr_base" ] && [ ! -L "$nvr_base" ] || return 1
-    nvr_real_root=$(readlink -f "$nvr_root" 2>/dev/null) || return 1
-    nvr_real_base=$(readlink -f "$nvr_base" 2>/dev/null) || return 1
-    case "$nvr_real_base" in "$nvr_real_root"/*) ;; *) return 1 ;; esac
     # Never point archives at the same physical partition as external /opt.
     nvr_opt_entry=$(nvr_mount_entry "${NVR_OPT_PATH:-/opt}") || return 1
     nvr_archive_entry=$(nvr_mount_entry "$nvr_root") || return 1
     nvr_opt_source=$(printf '%s\n' "$nvr_opt_entry" | cut -d '|' -f 1)
     nvr_archive_source=$(printf '%s\n' "$nvr_archive_entry" | cut -d '|' -f 1)
     [ "$nvr_opt_source" != "$nvr_archive_source" ] || return 1
+}
+
+nvr_archive_safe() {
+    nvr_archive_dedicated "$1" || return 1
+    nvr_root=$1
+    nvr_base=$2
+    [ -d "$nvr_base" ] && [ ! -L "$nvr_base" ] || return 1
+    nvr_real_root=$(readlink -f "$nvr_root" 2>/dev/null) || return 1
+    nvr_real_base=$(readlink -f "$nvr_base" 2>/dev/null) || return 1
+    case "$nvr_real_base" in "$nvr_real_root"/*) ;; *) return 1 ;; esac
 }
