@@ -7,6 +7,8 @@ HERE=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
 SCRIPT_SRC="$HERE/stream.sh"
 INIT_SRC="$HERE/init.d/S99stream"
 EXAMPLE="$HERE/stream.conf.example"
+FLASH_HELPER="$HERE/entware-flash-guard.sh"
+[ -r "$FLASH_HELPER" ] || FLASH_HELPER="$HERE/../../tools/entware-flash-guard.sh"
 DEST_SCRIPT=/opt/etc/keenetic-stream.sh
 DEST_INIT=/opt/etc/init.d/S99stream
 DEST_CONFIG=/opt/etc/keenetic-stream.conf
@@ -18,6 +20,10 @@ preflight() {
     [ -x /opt/bin/opkg ] || fail 'Entware is missing; restore /opt before STREAM'
     [ -x /opt/bin/ffmpeg ] || fail 'ffmpeg missing; install it separately using opkg'
     [ -d /opt/etc/init.d ] || fail 'Entware init directory missing'
+    [ -r "$FLASH_HELPER" ] && sh -n "$FLASH_HELPER" ||
+        fail 'KAS S00ubifs helper missing/invalid'
+    . "$FLASH_HELPER"
+    knvr_flash_preflight || fail 'Entware flash-protection preflight failed'
     for file in "$SCRIPT_SRC" "$INIT_SRC" "$EXAMPLE"; do
         [ -r "$file" ] && sh -n "$file" || fail "Source missing or invalid: $file"
     done
@@ -38,6 +44,7 @@ copy_atomic() {
 }
 install() {
     preflight
+    knvr_flash_ensure || fail 'KAS S00ubifs installation/activation failed'
     mkdir -p "$BACKUP_DIR" || fail 'Cannot create backup directory'
     chmod 700 "$BACKUP_DIR"
     if [ -e "$DEST_SCRIPT" ]; then cp -p "$DEST_SCRIPT" "$BACKUP_DIR/keenetic-stream.previous.sh"; fi

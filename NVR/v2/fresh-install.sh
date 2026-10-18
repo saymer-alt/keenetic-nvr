@@ -6,6 +6,13 @@ PATH=/opt/bin:/opt/sbin:/bin:/sbin:/usr/bin:/usr/sbin
 HERE=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
 SOURCE="$HERE/nvr.sh"
 GUARD="$HERE/storage-guard.sh"
+FLASH_HELPER="$HERE/entware-flash-guard.sh"
+[ -r "$FLASH_HELPER" ] || FLASH_HELPER="$HERE/../../tools/entware-flash-guard.sh"
+[ -r "$FLASH_HELPER" ] && sh -n "$FLASH_HELPER" || {
+    printf 'ERROR: missing KAS flash helper\n' >&2; exit 1;
+}
+. "$FLASH_HELPER"
+FLASH_APPLY=0
 INSTALLED_GUARD=/opt/etc/nvr-storage-guard.sh
 RECORDER=/opt/etc/nvr-v2.sh
 CONFIG=/opt/etc/nvr-v2.conf
@@ -40,6 +47,7 @@ prerequisites() {
     [ -r "$GUARD" ] && sh -n "$GUARD" || fail 'Missing or invalid storage-guard.sh'
     . "$GUARD"
     profile=$(nvr_opt_profile) || fail 'Unknown /opt filesystem; refusing NAND-unsafe installation'
+    knvr_flash_preflight || fail 'Entware NAND flash profile unsafe'
     printf 'Entware storage profile: %s\n' "$profile"
     candidates=$(awk '$2 ~ /^\/tmp\/mnt\// && $1 ~ /^\/dev\// && $3=="ext4" && $4 ~ /(^|,)rw(,|$)/ {print $2}' /proc/mounts)
     [ -n "$candidates" ] || fail 'No mounted EXT4 RW USB archive disk'
@@ -56,6 +64,9 @@ prerequisites() {
         IFS= read -r answer < /dev/tty || fail 'Input cancelled'
         case $answer in y|Y|yes|YES)
             [ -x "$OPKG" ] || fail "opkg missing at $OPKG; install packages manually"
+            [ "$FLASH_APPLY" = 1 ] ||
+                fail 'Preflight is read-only; run install-fresh to install packages'
+            knvr_flash_ensure || fail 'KAS S00ubifs protection failed'
             opkg update || fail 'opkg update failed; check Entware feed and disk'
             opkg install $need || fail 'opkg install failed; install packages manually and retry'
             need=$(missing_deps)
@@ -336,7 +347,9 @@ schedule() {
     trap - EXIT HUP INT TERM
 }
 install_fresh() {
+    FLASH_APPLY=1
     prerequisites
+    knvr_flash_ensure || fail 'KAS S00ubifs could not be activated'
     [ -e "$RECORDER" ] && [ ! -e "$CONFIG" ] && fail 'Recorder exists without config; inspect manually'
     if [ ! -e "$CONFIG" ]; then configure; fi
     cp "$GUARD" "$INSTALLED_GUARD"
@@ -359,6 +372,10 @@ install_fresh() {
 case ${1:-} in
     preflight-fresh) prerequisites ;;
     install-fresh) install_fresh ;;
-    configure-fresh) prerequisites; configure ;;
+    configure-fresh)
+        FLASH_APPLY=1
+        prerequisites
+        knvr_flash_ensure || fail 'KAS S00ubifs could not be activated'
+        configure ;;
     *) echo 'Usage: fresh-install.sh {preflight-fresh|install-fresh|configure-fresh}' >&2; exit 2;;
 esac
