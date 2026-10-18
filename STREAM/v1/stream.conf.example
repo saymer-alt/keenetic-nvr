@@ -1,0 +1,13 @@
+# Keenetic STREAM v1 — copy to /opt/etc/keenetic-stream.conf (chmod 600).
+# Only on the STREAM router, never inside the NVR recorder config.
+STREAM_RTSP_HOST='192.168.1.135'
+STREAM_RTSP_PORT=554
+STREAM_RTSP_USER='YOUR_RTSP_USER'
+STREAM_RTSP_PASSWORD='YOUR_RTSP_PASSWORD'
+# Bind on the stream router's LAN IP; do not expose the listener to WAN.
+STREAM_BIND='192.168.1.3'
+STREAM_PLAYLIST_HOST='192.168.1.3'
+# Use 102/202/302 for low-bitrate camera substreams if Selenga rejects 2K/H.265.
+# Old deployments can select 8999/9000/9001 instead of 8081/8082/8083.
+STREAM_CHANNELS='101:8081 201:8082 301:8083'
+STREAM_RESTART_DELAY=2
