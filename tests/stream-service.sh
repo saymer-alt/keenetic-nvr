@@ -11,6 +11,8 @@ T=$(mktemp -d /tmp/knvr-stream-test.XXXXXX)
 export STREAM_TEST_LOG="$T/args.log"
 export STREAM_CONFIG="$T/config"
 export STREAM_STATE_DIR="$T/state"
+export STREAM_MOUNTS_FILE="$T/mounts"
+printf 'tmpfs /tmp tmpfs rw,nosuid,nodev 0 0\n' > "$STREAM_MOUNTS_FILE"
 cleanup() {
     /bin/sh STREAM/v1/stream.sh stop >/dev/null 2>&1 || :
     rm -rf "$T"
@@ -36,6 +38,18 @@ STREAM_FFMPEG_BIN='$T/fake-ffmpeg'
 EOF
 stream() { busybox sh STREAM/v1/stream.sh "$@"; }
 stream check | grep -q 'preflight PASS'
+# Existing NAND/bind mount under /tmp must fail closed.
+printf '/dev/ubi0_0 /tmp ubifs rw 0 0\n' > "$STREAM_MOUNTS_FILE"
+if stream check >/dev/null 2>&1; then
+    echo 'FAIL: accepted NAND-backed /tmp' >&2; exit 1
+fi
+[ ! -d "$T/state" ] || { echo 'FAIL: created state on NAND-backed /tmp' >&2; exit 1; }
+printf 'tmpfs /tmp tmpfs rw,nosuid,nodev 0 0\n' > "$STREAM_MOUNTS_FILE"
+# Reject state symlinks escaping RAM before writing any process state.
+ln -s /etc "$T/unsafe-state"
+STREAM_STATE_DIR="$T/unsafe-state" stream check >/dev/null 2>&1 && {
+    echo 'FAIL: accepted symlinked STREAM_STATE_DIR' >&2; exit 1
+}
 playlist=$(stream playlist)
 printf '%s\n' "$playlist" | grep -q '#EXTM3U'
 printf '%s\n' "$playlist" | grep -q 'http://192.0.2.3:8081'
