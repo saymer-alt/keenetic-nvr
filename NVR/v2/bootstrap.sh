@@ -10,7 +10,7 @@ esac
 # The default follows the published main branch. To test a development branch,
 # export NVR_RAW_BASE=<raw URL base of that branch> before running.
 ROOT_RAW=${NVR_PROJECT_RAW_BASE:-https://raw.githubusercontent.com/saymer-alt/keenetic-nvr/main}
-RAW=${NVR_RAW_BASE:-$ROOT_RAW/NVR/v2}
+RAW=${NVR_RAW_BASE:-https://raw.githubusercontent.com/saymer-alt/keenetic-nvr/main/NVR/v2}
 FLASH_HELPER_URL=${NVR_FLASH_HELPER_URL:-$ROOT_RAW/tools/entware-flash-guard.sh}
 if ! command -v curl >/dev/null 2>&1; then
     echo 'curl missing. Install: opkg update && opkg install curl' >&2
