@@ -3,6 +3,8 @@
 > **Основной репозиторий:** [saymer-alt/keenetic-nvr](https://github.com/saymer-alt/keenetic-nvr).
 > Проект выделен из [keenetic-knowledge-base](https://github.com/saymer-alt/keenetic-knowledge-base); историю переноса см. в [REPOSITORY-EXTRACTION.md](REPOSITORY-EXTRACTION.md).
 
+**Релизный кандидат v2.5.0-rc.1:** [release notes](../../RELEASE-NOTES-v2.5.0-rc.1.md). Основная разработка уже находится в `main`, полный финальный релиз пока ограничен аппаратными сценариями #7.
+
 **Проверенная аппаратно база: v2.4, KN-1012 (10.10.2026).**
 **NVR v2.5: частичная аппаратная приёмка TIME/72h на KN-1012 (18.10.2026)** — три камеры HEALTHY, новые MKV на существующем EXT4, `cleanup --dry-run` 276 кандидатов без ошибок, реальный `cleanup` 276 удалений (около 14.9 GB свободного пространства), watchdog/cron восстановлены, Telegram-уведомления доставлены, команды `/status`, `/cameras`, `/disk`, `/help` **PASS 4/4**. Подробно: [финальный протокол восстановления](../../FIELD-ACCEPTANCE-2026-10-18.md).
 
