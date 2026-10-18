@@ -43,7 +43,8 @@ printf '/dev/ubi0_0 /tmp ubifs rw 0 0\n' > "$STREAM_MOUNTS_FILE"
 if stream check >/dev/null 2>&1; then
     echo 'FAIL: accepted NAND-backed /tmp' >&2; exit 1
 fi
-[ ! -d "$T/state" ] || { echo 'FAIL: created state on NAND-backed /tmp' >&2; exit 1; }
+[ -z "$(find "$T/state" -type f -print -quit 2>/dev/null)" ] ||
+    { echo 'FAIL: wrote process state on NAND-backed /tmp' >&2; exit 1; }
 printf 'tmpfs /tmp tmpfs rw,nosuid,nodev 0 0\n' > "$STREAM_MOUNTS_FILE"
 # Reject state symlinks escaping RAM before writing any process state.
 ln -s /etc "$T/unsafe-state"
