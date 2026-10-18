@@ -3,7 +3,7 @@ name: NVR checks
 on:
   push:
     branches: [main, 'nvr/**']
-    paths: ['NVR/**', 'STREAM/**', 'tests/**', '.github/workflows/nvr-ci.yml', 'README.md', 'setup.sh', '.gitattributes', 'legacy/**']
+    paths: ['NVR/**', 'STREAM/**', 'tools/**', 'NAND-WEAR.md', 'tests/**', '.github/workflows/nvr-ci.yml', 'README.md', 'setup.sh', '.gitattributes', 'legacy/**']
   # Required check must run on EVERY pull request, including docs-only changes.
   # Otherwise a protected main branch can get stuck waiting for a skipped job.
   pull_request:
@@ -22,13 +22,13 @@ jobs:
 
       - name: Shell syntax (POSIX sh + BusyBox ash)
         run: |
-          for f in setup.sh NVR/v2/nvr.sh NVR/v2/install-router.sh NVR/v2/fresh-install.sh NVR/v2/upgrade-router.sh NVR/v2/bootstrap.sh NVR/v2/telegram-setup.sh NVR/v2/telegram-bot.sh NVR/v2/telegram-bot-install.sh NVR/v2/storage-guard.sh STREAM/v1/stream.sh STREAM/v1/install.sh STREAM/v1/bootstrap.sh STREAM/v1/init.d/S99stream tests/nand-storage-guard.sh tests/telegram-bot-commands.sh tests/storage-policies.sh tests/setup-entrypoint.sh tests/source-links.sh tests/smoke.sh tests/retention-cases.sh tests/notify-logic.sh tests/secrets-scan.sh tests/fresh-config-smoke.sh; do
+          for f in setup.sh NVR/v2/nvr.sh NVR/v2/install-router.sh NVR/v2/fresh-install.sh NVR/v2/upgrade-router.sh NVR/v2/bootstrap.sh NVR/v2/telegram-setup.sh NVR/v2/telegram-bot.sh NVR/v2/telegram-bot-install.sh NVR/v2/storage-guard.sh STREAM/v1/stream.sh STREAM/v1/install.sh STREAM/v1/bootstrap.sh STREAM/v1/init.d/S99stream tools/nand-audit.sh tests/nand-audit.sh tests/nand-wear-runtime.sh tests/nand-storage-guard.sh tests/telegram-bot-commands.sh tests/storage-policies.sh tests/setup-entrypoint.sh tests/source-links.sh tests/smoke.sh tests/retention-cases.sh tests/notify-logic.sh tests/secrets-scan.sh tests/fresh-config-smoke.sh; do
             sh -n "$f"
             busybox sh -n "$f"
           done
 
       - name: ShellCheck (errors only)
-        run: shellcheck -S error setup.sh NVR/v2/*.sh STREAM/v1/*.sh STREAM/v1/init.d/S99stream tests/*.sh
+        run: shellcheck -S error setup.sh NVR/v2/*.sh STREAM/v1/*.sh STREAM/v1/init.d/S99stream tools/*.sh tests/*.sh
 
       - name: BusyBox smoke
         run: sh tests/smoke.sh
@@ -53,6 +53,11 @@ jobs:
 
       - name: Independent Selenga STREAM lifecycle and playlist
         run: sh tests/stream-service.sh
+
+      - name: Both routers NAND runtime and read-only audit
+        run: |
+          sh tests/nand-wear-runtime.sh
+          sh tests/nand-audit.sh
 
       - name: Single-command fresh setup entrypoint
         run: sh tests/setup-entrypoint.sh
