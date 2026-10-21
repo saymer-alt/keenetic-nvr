@@ -1,0 +1,75 @@
+# One-time KNVR release-candidate publication.
+# Publishes only after the protected main branch passes the regular NVR CI.
+# Does not deploy to any Keenetic device or change running configurations.
+name: Publish KNVR v2.5.0-rc.1
+
+on:
+  workflow_run:
+    workflows: ["NVR checks"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-knvr-v2.5.0-rc.1
+  cancel-in-progress: false
+
+jobs:
+  publish-rc:
+    if: >-
+      ${{ github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.event == 'push' &&
+          github.event.workflow_run.head_repository.full_name == github.repository &&
+          github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out the CI-tested commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Publish once, only for the current tested main commit
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ github.event.workflow_run.head_sha }}
+          RELEASE_TAG: v2.5.0-rc.1
+        run: |
+          set -euo pipefail
+
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          MAIN_SHA="$(git ls-remote origin refs/heads/main | cut -f1)"
+          test -n "$MAIN_SHA"
+          if [ "$MAIN_SHA" != "$TARGET_SHA" ]; then
+            echo "::error::main moved after NVR CI; do not release an older revision"
+            exit 1
+          fi
+
+          test -s RELEASE-NOTES-v2.5.0-rc.1.md
+          grep -q 'NVR v2.5' NVR/v2/nvr.sh
+          grep -q 'CIRCULAR/HYBRID' RELEASE-NOTES-v2.5.0-rc.1.md
+
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists — nothing to do."
+            exit 0
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "::error::Tag exists without a published release; inspect manually (do not reuse)."
+            exit 1
+          fi
+
+          gh release create "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$TARGET_SHA" \
+            --title "Keenetic NVR v2.5.0-rc.1 (предварительный выпуск)" \
+            --notes-file RELEASE-NOTES-v2.5.0-rc.1.md \
+            --prerelease \
+            --latest=false
+
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json tagName,isPrerelease,url,targetCommitish \
+            --jq '{tag: .tagName, prerelease: .isPrerelease, url: .url, target: .targetCommitish}'
