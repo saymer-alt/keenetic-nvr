@@ -319,4 +319,13 @@ sh tests/setup-entrypoint.sh
 
 Никогда не публикуйте содержимое `/opt/etc/nvr-v2.conf`, токены Telegram, RTSP-пароли, полные выводы `ps` или видеоархивы. RTSP URL может быть виден локально в параметрах процесса FFmpeg; выделенная RTSP-учётная запись рекомендуется.
 
-Лицензия: [MIT](LICENSE). Обратная связь — через GitHub Issues этого репозитория.
+Лицензия: [MIT](LICENSE).
+
+## Ошибки, предложения и обратная связь
+
+- **Ошибка** — [форма Bug report](https://github.com/saymer-alt/keenetic-nvr/issues/new?template=bug_report.yml)
+- **Предложение** — [форма Feature request](https://github.com/saymer-alt/keenetic-nvr/issues/new?template=feature_request.yml)
+- **Свободный вопрос** — [обычный Issue без шаблона](https://github.com/saymer-alt/keenetic-nvr/issues/new)
+- **Уязвимость** — только приватно через [Report a vulnerability](https://github.com/saymer-alt/keenetic-nvr/security/advisories/new); не публикуйте технические детали в Issues.
+
+Перед публикацией обезличивайте материалы: без паролей, токенов, закрытых ключей, подписок, VPN-ключей и приватных IP-конфигураций.
