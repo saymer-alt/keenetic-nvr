@@ -33,6 +33,9 @@ jobs:
       - name: Simple KNVR removal
         run: sudo sh tests/uninstall.sh
 
+      - name: Recorder survives SSH terminal disconnect
+        run: python3 tests/ssh-disconnect.py
+
       - name: BusyBox smoke
         run: sh tests/smoke.sh
 

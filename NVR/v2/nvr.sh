@@ -318,11 +318,15 @@ start_cam() {
         user=$RTSP_USER; pass=$RTSP_PASS
     fi
     url="rtsp://$user:$pass@$RTSP_IP:554/Streaming/Channels/$id"
-    "$FFMPEG" -hide_banner -nostdin -loglevel error \
-        -timeout 15000000 -rtsp_transport tcp -i "$url" \
-        -c copy -f segment -segment_time "$SEGMENT" -strftime 1 -reset_timestamps 1 \
-        "$NVR_BASE_DIR/cam$id/cam${id}_%Y-%m-%d_%H-%M-%S.mkv" \
-        </dev/null >> "$fl" 2>&1 &
+    # SSH/installer TTY closure must not stop the detached recorder. Preserve
+    # normal TERM handling for explicit stop; only the child ignores HUP.
+    (
+        trap '' HUP
+        exec "$FFMPEG" -hide_banner -nostdin -loglevel error \
+            -timeout 15000000 -rtsp_transport tcp -i "$url" \
+            -c copy -f segment -segment_time "$SEGMENT" -strftime 1 -reset_timestamps 1 \
+            "$NVR_BASE_DIR/cam$id/cam${id}_%Y-%m-%d_%H-%M-%S.mkv"
+    ) </dev/null >> "$fl" 2>&1 &
     p=$!
     printf '%s\n' "$p" > "$STATE/cam$id.pid"
     printf '%s\n' "$NOW" > "$STATE/cam$id.started"
