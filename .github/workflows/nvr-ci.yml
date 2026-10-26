@@ -31,7 +31,7 @@ jobs:
         run: shellcheck -S error uninstall.sh setup.sh NVR/v2/*.sh STREAM/v1/*.sh STREAM/v1/init.d/S99stream tools/*.sh tests/*.sh
 
       - name: Simple KNVR removal
-        run: sh tests/uninstall.sh
+        run: sudo sh tests/uninstall.sh
 
       - name: BusyBox smoke
         run: sh tests/smoke.sh
