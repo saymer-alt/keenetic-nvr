@@ -602,14 +602,20 @@ status() {
         elif [ "$paused" -eq 1 ]; then
             state=STOPPED
         elif owned "$id" "$pid"; then
-            case $age in
-                none) state=STARTING;;
-                unknown|*[!0-9-]*) state=UNKNOWN;;
-                -*) if [ "$age" -ge "-$STALE" ]; then state=HEALTHY
-                    else state=UNKNOWN; fi;;
-                *) if [ "$age" -le "$STALE" ]; then state=HEALTHY
-                   else state=STALE; fi;;
-            esac
+            # A newly opened MKV may still be empty while FFmpeg buffers input.
+            # PID + mtime alone are not evidence of recorded video.
+            if [ ! -s "$(newest "$id")" ]; then
+                state=STARTING
+            else
+                case $age in
+                    none) state=STARTING;;
+                    unknown|*[!0-9-]*) state=UNKNOWN;;
+                    -*) if [ "$age" -ge "-$STALE" ]; then state=HEALTHY
+                        else state=UNKNOWN; fi;;
+                    *) if [ "$age" -le "$STALE" ]; then state=HEALTHY
+                       else state=STALE; fi;;
+                esac
+            fi
         else
             # A recent video file is not proof of an active recorder.
             state=DOWN
