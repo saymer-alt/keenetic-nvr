@@ -348,3 +348,5 @@ Telegram, резервные копии, STREAM, Entware, FFmpeg, Cron и S00ubi
 Для повторной установки с сохранённым конфигом используйте
 `sh NVR/v2/bootstrap.sh install-fresh` из скачанного репозитория. Обычный
 `setup.sh install` намеренно отказывается перезаписывать существующий конфиг.
+
+Результаты виртуальной проверки: [KNVR в Router Emulator](docs/testing/KNVR-EMULATOR-2026-10-27.md).
