@@ -74,4 +74,7 @@ Mesh-reset, upgrade v2.4→v2.5 и многосуточная надёжност
 Нативная SSH авторизация Entware и её reboot проверяются в каждом прогоне KNVR.
 Дополнительный цикл входа в NDM CLI выполняется отдельным платформенным стендом;
 AUTH_READY для этого консольного протокола в KNVR consumer остаётся NOT_TESTED.
-Рабочие роутеры не изменялись. Merge, stable и release не выполнялись.
+Рабочие роутеры не изменялись. 27.10.2026 реализация объединена в `main`
+через [KNVR #32](https://github.com/saymer-alt/keenetic-nvr/pull/32),
+стенд — через [Router Emulator #36](https://github.com/saymer-alt/router-emulator/pull/36).
+Публикация stable и release не выполнялась.
