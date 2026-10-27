@@ -16,17 +16,29 @@ trap 'exit 130' INT
 trap 'exit 143' HUP TERM
 
 case "$MODE" in
-    install|preflight) ;;
+    install|preflight|remove) ;;
     -h|--help|help)
-        printf 'Usage: sh setup.sh [install|preflight]\n'
+        printf 'Usage: sh setup.sh [install|preflight|remove]\n'
         printf 'Requires Entware, an interactive SSH TTY and a separate USB EXT4 archive disk.\n'
         printf 'Default: install a fresh NVR v2.5, not upgrade an existing recorder.\n'
         exit 0
         ;;
-    *) fail 'Use install, preflight or --help' ;;
+    *) fail 'Use install, preflight, remove or --help' ;;
 esac
 
 [ "$(id -u)" = 0 ] || fail 'Run as root over SSH'
+if [ "$MODE" = remove ]; then
+    command -v curl >/dev/null 2>&1 || fail 'curl missing'
+    PROJECT=${NVR_PROJECT_RAW_BASE:-https://raw.githubusercontent.com/saymer-alt/keenetic-nvr/main}
+    case "$PROJECT" in https://*) ;; *) fail 'NVR_PROJECT_RAW_BASE must use HTTPS';; esac
+    TMP_DIR=$(mktemp -d /tmp/nvr-entry.XXXXXX) || fail 'Cannot create temporary directory'
+    curl -fSsL --retry 2 --connect-timeout 15 --max-time 45 \
+        "$PROJECT/uninstall.sh" -o "$TMP_DIR/uninstall.sh" || fail 'Could not download removal script'
+    [ -s "$TMP_DIR/uninstall.sh" ] && sh -n "$TMP_DIR/uninstall.sh" || fail 'Invalid removal script'
+    # Read confirmation from the terminal for the curl | sh entrypoint.
+    sh "$TMP_DIR/uninstall.sh" < /dev/tty
+    exit $?
+fi
 [ -x /opt/bin/opkg ] || fail 'Entware not installed: set up /opt and opkg first'
 [ -r /dev/tty ] && [ -w /dev/tty ] ||
     fail 'An interactive SSH TTY is required (ssh -t)'

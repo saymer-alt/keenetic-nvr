@@ -318,11 +318,15 @@ start_cam() {
         user=$RTSP_USER; pass=$RTSP_PASS
     fi
     url="rtsp://$user:$pass@$RTSP_IP:554/Streaming/Channels/$id"
-    "$FFMPEG" -hide_banner -nostdin -loglevel error \
-        -timeout 15000000 -rtsp_transport tcp -i "$url" \
-        -c copy -f segment -segment_time "$SEGMENT" -strftime 1 -reset_timestamps 1 \
-        "$NVR_BASE_DIR/cam$id/cam${id}_%Y-%m-%d_%H-%M-%S.mkv" \
-        </dev/null >> "$fl" 2>&1 &
+    # SSH/installer TTY closure must not stop the detached recorder. Preserve
+    # normal TERM handling for explicit stop; only the child ignores HUP.
+    (
+        trap '' HUP
+        exec "$FFMPEG" -hide_banner -nostdin -loglevel error \
+            -timeout 15000000 -rtsp_transport tcp -i "$url" \
+            -c copy -f segment -segment_time "$SEGMENT" -strftime 1 -reset_timestamps 1 \
+            "$NVR_BASE_DIR/cam$id/cam${id}_%Y-%m-%d_%H-%M-%S.mkv"
+    ) </dev/null >> "$fl" 2>&1 &
     p=$!
     printf '%s\n' "$p" > "$STATE/cam$id.pid"
     printf '%s\n' "$NOW" > "$STATE/cam$id.started"
@@ -598,14 +602,20 @@ status() {
         elif [ "$paused" -eq 1 ]; then
             state=STOPPED
         elif owned "$id" "$pid"; then
-            case $age in
-                none) state=STARTING;;
-                unknown|*[!0-9-]*) state=UNKNOWN;;
-                -*) if [ "$age" -ge "-$STALE" ]; then state=HEALTHY
-                    else state=UNKNOWN; fi;;
-                *) if [ "$age" -le "$STALE" ]; then state=HEALTHY
-                   else state=STALE; fi;;
-            esac
+            # A newly opened MKV may still be empty while FFmpeg buffers input.
+            # PID + mtime alone are not evidence of recorded video.
+            if [ ! -s "$(newest "$id")" ]; then
+                state=STARTING
+            else
+                case $age in
+                    none) state=STARTING;;
+                    unknown|*[!0-9-]*) state=UNKNOWN;;
+                    -*) if [ "$age" -ge "-$STALE" ]; then state=HEALTHY
+                        else state=UNKNOWN; fi;;
+                    *) if [ "$age" -le "$STALE" ]; then state=HEALTHY
+                       else state=STALE; fi;;
+                esac
+            fi
         else
             # A recent video file is not proof of an active recorder.
             state=DOWN

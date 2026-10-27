@@ -329,3 +329,24 @@ sh tests/setup-entrypoint.sh
 - **Уязвимость** — только приватно через [Report a vulnerability](https://github.com/saymer-alt/keenetic-nvr/security/advisories/new); не публикуйте технические детали в Issues.
 
 Перед публикацией обезличивайте материалы: без паролей, токенов, закрытых ключей, подписок, VPN-ключей и приватных IP-конфигураций.
+
+## Удаление KNVR (NVR v2)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/saymer-alt/keenetic-nvr/main/setup.sh | sh -s -- remove
+```
+
+Введите `REMOVE`. Для локально скачанного репозитория: `sh uninstall.sh`
+(или `sh uninstall.sh --yes` для намеренного запуска без вопроса).
+Удаление отключает задания NVR/Telegram в cron, останавливает запись и удаляет
+три программных файла NVR v2. **Видеоархив, конфиг `/opt/etc/nvr-v2.conf`, offset
+Telegram, резервные копии, STREAM, Entware, FFmpeg, Cron и S00ubifs сохраняются.**
+Повторный запуск допустим. При `PARTIAL` устраните указанную причину и повторите
+команду; оставшиеся программные файлы сохраняются для диагностики и остановки.
+Ручные shell-обёртки/нестандартные задания cron и legacy v1 требуют ручной проверки.
+
+Для повторной установки с сохранённым конфигом используйте
+`sh NVR/v2/bootstrap.sh install-fresh` из скачанного репозитория. Обычный
+`setup.sh install` намеренно отказывается перезаписывать существующий конфиг.
+
+Результаты виртуальной проверки: [KNVR в Router Emulator](docs/testing/KNVR-EMULATOR-2026-10-27.md).
